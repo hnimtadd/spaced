@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Spaced</title>
+    <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .preserve-3d {
+            transform-style: preserve-3d;
+        }
+
+        .perspective {
+            perspective: 1000px;
+        }
+
+        .backface-hidden {
+            backface-visibility: hidden;
+        }
+
+        .rotate-y-180 {
+            transform: rotateY(180deg);
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 font-sans flex flex-col min-h-screen">
+    <div id="app" class="flex-grow">
+        <nav class="bg-white shadow-md">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex-shrink-0">
+                        <h1 class="text-2xl font-bold text-gray-800">Spaced</h1>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <div class="max-w-2xl mx-auto">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-extrabold text-gray-900">Vocabulary Flashcards</h2>
+                    <p class="mt-2 text-lg text-gray-600">Tap the card to see the other side.</p>
+                </div>
+
+                <div class="perspective">
+                    <div id="flashcard"
+                        class="relative w-full h-[32rem] preserve-3d transition-transform duration-500 cursor-pointer">
+                        <!-- Front Face -->
+                        <div id="front-face"
+                            class="absolute w-full h-full backface-hidden rounded-2xl bg-white shadow-xl flex items-center justify-center p-6">
+                            <h3 id="word" class="text-5xl font-bold text-gray-800 text-center break-words"></h3>
+                        </div>
+                        <!-- Back Face -->
+                        <div id="back-face"
+                            class="absolute w-full h-full backface-hidden rounded-2xl bg-blue-500 text-white shadow-xl flex flex-col items-center justify-center p-6 rotate-y-180">
+                            <p id="definition" class="text-2xl font-semibold text-center break-words"></p>
+                            <p id="example" class="mt-4 text-lg text-blue-100 italic text-center break-words"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <footer class="py-6">
+        <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <button id="prev-btn"
+                class="p-3 bg-white text-gray-700 font-semibold rounded-full shadow-md hover:bg-gray-200 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+            <button id="flip-btn"
+                class="p-4 bg-blue-600 text-white font-bold rounded-full shadow-lg hover:bg-blue-700 transition-transform transform hover:scale-105">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 4v5h5M20 20v-5h-5M4 4l16 16" />
+                </svg>
+            </button>
+            <button id="next-btn"
+                class="p-3 bg-white text-gray-700 font-semibold rounded-full shadow-md hover:bg-gray-200 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+            </button>
+        </div>
+    </footer>
+
+    <script src="./wasm_exec.js"></script>
+    <script src="./main.js"></script>
+</body>
+
+</html>

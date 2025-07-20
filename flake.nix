@@ -16,7 +16,29 @@
           });
     in {
       devShells = forEachSystem ({ pkgs }: {
-        default = pkgs.mkShellNoCC { packages = with pkgs; [ hello ]; };
+        default = pkgs.mkShellNoCC {
+          packages = with pkgs; [
+            go_1_24
+            gopls
+            gotools
+
+            # AI/ML tools
+            nodejs-slim
+
+            # Development essentials
+            git
+            gnumake
+            direnv
+            fd
+            ripgrep
+            uutils-coreutils-noprefix
+
+            # Code formatter stuffs
+            prettierd
+            deno
+            vscode-langservers-extracted
+          ];
+        };
       });
     };
 }
