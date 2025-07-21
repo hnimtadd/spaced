@@ -5,22 +5,22 @@ class Crafter {
     this.isReady = null;
   }
 
-  init() {
+  async init() {
     this.isReady = false;
     this.go = new Go();
-    WebAssembly.instantiateStreaming(
-      fetch("/bin/main.wasm"),
-      this.go.importObject,
-    )
-      .then((result) => {
-        this.go.run(result.instance);
-        this.wasmBridge = globalThis.wasmBridge;
-        this.isReady = true;
-        console.info("Crafter: initialized");
-      })
-      .catch((err) => {
-        console.error(`Crafter: Error loading Go WASM module: ${err}`);
-      });
+    try {
+      const result = await WebAssembly.instantiateStreaming(
+        fetch("/bin/main.wasm"),
+        this.go.importObject,
+      );
+      this.go.run(result.instance);
+      this.wasmBridge = globalThis.wasmBridge;
+      this.isReady = true;
+      console.info("Crafter: initialized");
+      console.log(this.wasmBridge);
+    } catch (err) {
+      console.error(`Crafter: Error loading Go WASM module: ${err}`);
+    }
   }
 
   handle(id) {
@@ -44,12 +44,13 @@ class Crafter {
   }
 
   call(name, ...args) {
-    if (
-      !this.isReady ||
-      !this.wasmBridge ||
-      (!this.wasmBridge[name] && typeof this.wasmBridge[name] !== "function")
-    ) {
-      const errMsg = `WASM '${name}' not found or bridge not ready.`;
+    if (!this.isReady || !this.wasmBridge) {
+      const errMsg = `Bridge not ready.`;
+      console.error(errMsg);
+      throw new Error(errMsg);
+    }
+    if (!this.wasmBridge[name] && typeof this.wasmBridge[name] !== "function") {
+      const errMsg = `WASM '${name}' not found or in invalid type.`;
       console.error(errMsg);
       throw new Error(errMsg);
     }
@@ -64,61 +65,58 @@ class Crafter {
   }
 }
 class Worker {
-  constructor() {
-    this.cards = [
-      {
-        word: "Ephemeral",
-        definition: "Lasting for a very short time.",
-        example: "The beauty of the cherry blossoms is ephemeral.",
-      },
-      {
-        word: "Ubiquitous",
-        definition: "Present, appearing, or found everywhere.",
-        example: "Smartphones have become ubiquitous in modern society.",
-      },
-      {
-        word: "Mellifluous",
-        definition: "A sound that is sweet and musical; pleasant to hear.",
-        example: "She had a mellifluous voice that calmed everyone.",
-      },
-      {
-        word: "Serendipity",
-        definition:
-          "The occurrence of events by chance in a happy or beneficial way.",
-        example:
-          "Discovering the hidden cafe was a moment of pure serendipity.",
-      },
-      {
-        word: "Petrichor",
-        definition: "The pleasant, earthy smell after rain falls on dry soil.",
-        example: "He loved the smell of petrichor after a summer storm.",
-      },
-    ];
-    this.index = 0;
+  constructor(crafter) {
+    this.crafter = crafter;
+    this.currCard = null;
+    this.isReady = false;
   }
 
-  init() {
-    const flashcard = document.getElementById("flashcard");
-    const flipBtn = document.getElementById("flip-btn");
-    const prevBtn = document.getElementById("prev-btn");
-    const nextBtn = document.getElementById("next-btn");
+  async init() {
+    try {
+      this.isReady = false;
+      const response = await fetch("/assets/cards_sample.json");
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json(); // parse the JSON repsonse into the JS object
+      this.cards = data;
+      this.isReady = true;
 
-    // Event Listeners
-    flipBtn.addEventListener("click", this.flipCard);
-    flashcard.addEventListener("click", this.flipCard);
-    nextBtn.addEventListener("click", this.nextCard);
-    prevBtn.addEventListener("click", this.prevCard);
-    this.handleUpdateCard();
+      const storeResponse = this.crafter.call(
+        "store",
+        JSON.stringify(this.cards),
+      );
+      if (storeResponse.error !== null) {
+        console.error(storeResponse);
+        return;
+      }
+      this.fetchCard();
+      const flashcard = document.getElementById("flashcard");
+      const flipBtn = document.getElementById("flip-btn");
+      const prevBtn = document.getElementById("prev-btn");
+      const nextBtn = document.getElementById("next-btn");
+
+      // Event Listeners
+      flipBtn.addEventListener("click", this.flipCard.bind(this));
+      flashcard.addEventListener("click", this.flipCard.bind(this));
+      nextBtn.addEventListener("click", this.nextCard.bind(this));
+      prevBtn.addEventListener("click", this.prevCard.bind(this));
+      this.handleUpdateCard();
+    } catch (err) {
+      console.error("Error fetching or parsing JSON:", err);
+    }
   }
   handleUpdateCard() {
+    console.log("update");
     const wordEl = document.getElementById("word");
     const definitionEl = document.getElementById("definition");
     const exampleEl = document.getElementById("example");
-    const card = this.cards[this.index];
     const flashcard = document.getElementById("flashcard");
-    wordEl.textContent = card.word;
-    definitionEl.textContent = card.definition;
-    exampleEl.textContent = `"${card.example}"`;
+    console.log(`update with card ${this.currentCard}`);
+    console.log(wordEl);
+    wordEl.textContent = this.currentCard.word;
+    definitionEl.textContent = this.currentCard.definition;
+    exampleEl.textContent = `"${this.currentCard.example}"`;
     flashcard.classList.remove("rotate-y-180");
   }
 
@@ -127,20 +125,26 @@ class Worker {
     flashcard.classList.toggle("rotate-y-180");
   }
 
+  fetchCard() {
+    const card = this.crafter.call("suggest");
+    this.currentCard = JSON.parse(card);
+  }
+
   nextCard() {
-    this.index = (this.index + 1) % cards.length;
-    this.updateCard();
+    this.fetchCard();
+    this.handleUpdateCard();
   }
 
   prevCard() {
-    this.index = (this.index - 1 + cards.length) % cards.length;
-    this.updateCard();
+    this.fetchCard();
+    this.handleUpdateCard();
   }
 }
 const crafter = new Crafter();
-const worker = new Worker();
+const worker = new Worker(crafter);
 
-globalThis.onload = () => {
-  crafter.init();
-  worker.init();
+globalThis.onload = async () => {
+  await crafter.init();
+  console.log(crafter);
+  await worker.init();
 };

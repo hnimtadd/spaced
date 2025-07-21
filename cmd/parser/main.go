@@ -1,16 +1,19 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"slices"
 	"strings"
+
+	"github.com/hnimtadd/spaced/src/core/model"
 )
 
 type data [4]string
 
 func main() {
-	fileBytes, err := os.ReadFile("./assets/notes.txt")
+	fileBytes, err := os.ReadFile("./src/assets/data.txt")
 	if err != nil {
 		panic("failed to read notes file: " + err.Error())
 	}
@@ -18,7 +21,7 @@ func main() {
 	lines := strings.Split(string(fileBytes), "\n")
 	fmt.Println(len(lines))
 
-	cards := make([]data, len(lines))
+	datas := make([]data, len(lines))
 
 	for cardIdx, line := range lines {
 		parts := strings.Split(line, "\t")
@@ -30,14 +33,32 @@ func main() {
 				idx++
 			}
 		}
-		cards[cardIdx] = item
+		datas[cardIdx] = item
 	}
 
-	for sample := range slices.Values(cards[0:10]) {
-		fmt.Println("word: ", sample[0])
-		fmt.Println("definition: ", sample[1])
-		fmt.Println("example: ", sample[2])
-		fmt.Println("ipa: ", sample[3])
-		fmt.Println("========================")
+	cards := make([]model.Card, len(datas))
+	for idx, sample := range datas {
+		cards[idx] = model.Card{
+			Word:       sample[0],
+			Definition: sample[1],
+			Example:    sample[2],
+			IPA:        sample[3],
+		}
 	}
+	jsonBytes, err := json.Marshal(cards)
+	if err != nil {
+		panic("failed to marshal cards data: " + err.Error())
+	}
+	if err := os.WriteFile("./src/assets/cards.json", jsonBytes, os.ModePerm); err != nil {
+		panic("failed to write marshalled cards: " + err.Error())
+	}
+
+	jsonBytes, err = json.Marshal(cards[0:10])
+	if err != nil {
+		panic("failed to marshal sample cards data: " + err.Error())
+	}
+	if err := os.WriteFile("./src/assets/cards_sample.json", jsonBytes, os.ModePerm); err != nil {
+		panic("failed to write marshalled sample cards: " + err.Error())
+	}
+	fmt.Println("🚀 complete")
 }
