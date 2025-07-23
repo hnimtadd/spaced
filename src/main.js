@@ -71,26 +71,13 @@ class Worker {
     this.isReady = false;
   }
 
-  async init() {
+  init() {
     try {
       this.isReady = false;
-      const response = await fetch("/assets/cards_sample.json");
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json(); // parse the JSON repsonse into the JS object
-      this.cards = data;
       this.isReady = true;
 
-      const storeResponse = this.crafter.call(
-        "store",
-        JSON.stringify(this.cards),
-      );
-      if (storeResponse.error !== null) {
-        console.error(storeResponse);
-        return;
-      }
-      this.fetchCard();
+      // this.handlePushStateToWasm();
+      this.handleFetchCard();
       const flashcard = document.getElementById("flashcard");
       const flipBtn = document.getElementById("flip-btn");
       const prevBtn = document.getElementById("prev-btn");
@@ -125,18 +112,18 @@ class Worker {
     flashcard.classList.toggle("rotate-y-180");
   }
 
-  fetchCard() {
-    const card = this.crafter.call("suggest");
+  handleFetchCard() {
+    const card = this.crafter.call("next");
     this.currentCard = JSON.parse(card);
   }
 
   nextCard() {
-    this.fetchCard();
+    this.handleFetchCard();
     this.handleUpdateCard();
   }
 
   prevCard() {
-    this.fetchCard();
+    this.handleFetchCard();
     this.handleUpdateCard();
   }
 }
@@ -145,6 +132,5 @@ const worker = new Worker(crafter);
 
 globalThis.onload = async () => {
   await crafter.init();
-  console.log(crafter);
-  await worker.init();
+  worker.init();
 };
