@@ -94,12 +94,10 @@ class Worker {
     }
   }
   handleUpdateCard() {
-    console.log("update");
     const wordEl = document.getElementById("word");
     const definitionEl = document.getElementById("definition");
     const exampleEl = document.getElementById("example");
     const flashcard = document.getElementById("flashcard");
-    console.log(`update with card ${this.currentCard}`);
     console.log(wordEl);
     wordEl.textContent = this.currentCard.word;
     definitionEl.textContent = this.currentCard.definition;

@@ -8,13 +8,16 @@ import (
 	"fmt"
 	"math/rand"
 	"syscall/js"
+	"time"
 
 	"github.com/hnimtadd/spaced/src/core/model"
+	"github.com/open-spaced-repetition/go-fsrs/v3"
 )
 
 type SpacedManager struct {
 	Cards        []model.Card
 	localStorage js.Value
+	fsrs         *fsrs.FSRS
 }
 
 func NewSpacedManger() (*SpacedManager, error) {
@@ -24,6 +27,7 @@ func NewSpacedManger() (*SpacedManager, error) {
 	}
 	m := &SpacedManager{
 		localStorage: localStorage,
+		fsrs:         fsrs.NewFSRS(fsrs.DefaultParam()),
 	}
 	m.init()
 	return m, nil
@@ -93,8 +97,53 @@ func (m *SpacedManager) handlePushState() error {
 }
 
 func (m *SpacedManager) next(_ js.Value, _ []js.Value) any {
-	idx := rand.Intn(len(m.Cards))
-	jsonBytes, err := json.Marshal(m.Cards[idx])
+	if len(m.Cards) == 0 {
+		return js.ValueOf(map[string]any{"error": "no cards found"})
+	}
+
+	var nextCard *model.Card
+	var minDueDate time.Time
+
+	now := time.Now()
+
+	for i, card := range m.Cards {
+		if card.LastReview.IsZero() {
+			// If the card has never been reviewed, it's a candidate for the next card.
+			// We can simply return the first such card we find.
+			return cardToJsValue(&m.Cards[i])
+		}
+
+		fsrsCard := card.ToFsrsCard()
+		schedulingCards := m.fsrs.Repeat(fsrsCard, now)
+
+		if card.State == fsrs.New {
+			// Still in the learning phase
+			if nextCard == nil || schedulingCards[fsrs.Rating(fsrs.Learning)].Card.Due.Before(minDueDate) {
+				nextCard = &m.Cards[i]
+				minDueDate = schedulingCards[fsrs.Rating(fsrs.Learning)].Card.Due
+			}
+		} else {
+			// In the review phase
+			if nextCard == nil || schedulingCards[fsrs.Rating(fsrs.Review)].Card.Due.Before(minDueDate) {
+				nextCard = &m.Cards[i]
+				minDueDate = schedulingCards[fsrs.Rating(fsrs.Review)].Card.Due
+			}
+		}
+	}
+
+	if nextCard == nil {
+		// This case should ideally not be reached if there are cards.
+		// As a fallback, return a random card.
+		fmt.Println("next from WASM land")
+		idx := rand.Intn(len(m.Cards))
+		return cardToJsValue(&m.Cards[idx])
+	}
+
+	return cardToJsValue(nextCard)
+}
+
+func cardToJsValue(card *model.Card) any {
+	jsonBytes, err := json.Marshal(card)
 	if err != nil {
 		return js.ValueOf(map[string]any{"error": "could not marshal the card, got: " + err.Error()})
 	}
