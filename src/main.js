@@ -18,28 +18,36 @@ class Crafter {
       this.isReady = true;
       console.info("Crafter: initialized");
       console.log(this.wasmBridge);
+
+      document.querySelectorAll("[craft-name]").forEach((ele) => {
+        this.handle(ele);
+      });
     } catch (err) {
       console.error(`Crafter: Error loading Go WASM module: ${err}`);
     }
   }
 
-  handle(id) {
+  handle(ele) {
     if (this.isReady === false) {
       console.error("crafter: instance is not ready");
       return;
     }
-    const ele = document.getElementById("id");
-    if (!ele) {
-      console.error(`ele with id: ${id} not exists.`);
-    }
-
     const method = ele.getAttribute("craft-name");
+    console.log(method);
 
     const handler = this.wasmBridge[method];
+    console.log(handler);
     if (!handler && typeof handler !== "function") {
       console.log("WASM method not found");
+      return;
     }
     const result = handler();
+    const target = ele.getAttribute("craft-target");
+    switch (target) {
+      case "":
+      case "this":
+        ele.innerHTML = result;
+    }
     console.log(result);
   }
 
@@ -73,7 +81,9 @@ class Worker {
 
   init() {
     const startBtn = document.getElementById("start-btn");
-    startBtn.addEventListener("click", this.start.bind(this));
+    if (startBtn) {
+      startBtn.addEventListener("click", this.start.bind(this));
+    }
   }
 
   start() {
@@ -120,11 +130,9 @@ class Worker {
     }
   }
   stop() {
-    const endScreen = document.getElementById("end-screen");
     const app = document.getElementById("app");
-
-    endScreen.classList.remove("hidden");
     app.classList.add("hidden");
+    globalThis.location.assign("/stats");
   }
   handleUpdateCard() {
     const wordEl = document.getElementById("word");

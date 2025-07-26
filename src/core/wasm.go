@@ -196,6 +196,10 @@ func (m *SpacedManager) start(js.Value, []js.Value) any {
 	return m.next(js.Value{}, []js.Value{})
 }
 
+func helloworld(js.Value, []js.Value) any {
+	return js.ValueOf("Helloworld")
+}
+
 func main() {
 	c := make(chan struct{})
 
@@ -209,6 +213,7 @@ func main() {
 		"start":  js.FuncOf(m.start),
 		"next":   js.FuncOf(m.next),
 		"submit": js.FuncOf(m.submit),
+		"stats":  js.FuncOf(helloworld),
 	}
 
 	wasmBridge := js.Global().Get("Object").New()
