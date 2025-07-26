@@ -72,37 +72,86 @@ class Worker {
   }
 
   init() {
+    const startBtn = document.getElementById("start-btn");
+    startBtn.addEventListener("click", this.start.bind(this));
+  }
+
+  start() {
+    const startScreen = document.getElementById("start-screen");
+    const app = document.getElementById("app");
+
+    startScreen.classList.add("hidden");
+    app.classList.remove("hidden");
+
+    const response = this.crafter.call("start");
+    if (response.error) {
+      console.error(response.error);
+      return;
+    }
+    this.currentCard = JSON.parse(response.payload);
+    this.handleUpdateCard();
+
     try {
       this.isReady = false;
       this.isReady = true;
 
       // this.handlePushStateToWasm();
-      this.handleFetchCard();
-      const flashcard = document.getElementById("flashcard");
-      const flipBtn = document.getElementById("flip-btn");
-      const prevBtn = document.getElementById("prev-btn");
       const nextBtn = document.getElementById("next-btn");
 
       // Event Listeners
-      flipBtn.addEventListener("click", this.flipCard.bind(this));
       flashcard.addEventListener("click", this.flipCard.bind(this));
-      nextBtn.addEventListener("click", this.nextCard.bind(this));
-      prevBtn.addEventListener("click", this.prevCard.bind(this));
+      nextBtn.addEventListener("click", (_) => {
+        this.handleSubmitReview(1);
+        this.nextCard();
+      });
+
+      const ratingBtns = document.querySelectorAll(".rating-btn");
+      ratingBtns.forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          const rating = e.target.dataset.rating;
+          this.handleSubmitReview(rating);
+          this.nextCard();
+        });
+      });
+
       this.handleUpdateCard();
     } catch (err) {
       console.error("Error fetching or parsing JSON:", err);
     }
+  }
+  stop() {
+    const endScreen = document.getElementById("end-screen");
+    const app = document.getElementById("app");
+
+    endScreen.classList.remove("hidden");
+    app.classList.add("hidden");
   }
   handleUpdateCard() {
     const wordEl = document.getElementById("word");
     const definitionEl = document.getElementById("definition");
     const exampleEl = document.getElementById("example");
     const flashcard = document.getElementById("flashcard");
-    console.log(wordEl);
     wordEl.textContent = this.currentCard.word;
     definitionEl.textContent = this.currentCard.definition;
     exampleEl.textContent = `"${this.currentCard.example}"`;
     flashcard.classList.remove("rotate-y-180");
+  }
+
+  handleFetchCard() {
+    const response = this.crafter.call("next");
+    if (response.error) {
+      console.error(response.error);
+      return;
+    }
+    if (response.stop) {
+      this.stop();
+      console.log("stop");
+      return;
+    }
+    if (response.payload) {
+      this.currentCard = JSON.parse(response.payload);
+      console.log(this.currentCard);
+    }
   }
 
   flipCard() {
@@ -110,17 +159,15 @@ class Worker {
     flashcard.classList.toggle("rotate-y-180");
   }
 
-  handleFetchCard() {
-    const card = this.crafter.call("next");
-    this.currentCard = JSON.parse(card);
+  handleSubmitReview(rating) {
+    this.crafter.call(
+      "submit",
+      JSON.stringify(this.currentCard.ID),
+      JSON.stringify(parseInt(rating)),
+    );
   }
 
   nextCard() {
-    this.handleFetchCard();
-    this.handleUpdateCard();
-  }
-
-  prevCard() {
     this.handleFetchCard();
     this.handleUpdateCard();
   }
