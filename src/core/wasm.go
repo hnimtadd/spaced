@@ -76,6 +76,12 @@ func (m *SpacedManager) JSInit(js.Value, []js.Value) any {
 						m.lookup[card.ID] = card
 					}
 					fmt.Println("cards loaded successfully")
+					// this is a hack, JS land and Go land should have a
+					// way to do some pub sub or callback management.
+					// so after create this, we could do something, like:
+					// this.get("craft-onload").Call()
+					// so the logic will be controlled by user in JS land.
+					js.Global().Get("location").Call("reload")
 				}
 				return js.ValueOf(nil)
 			}))
@@ -222,7 +228,6 @@ func (m *SpacedManager) JSSubmit(_ js.Value, args []js.Value) any {
 		fmt.Println("handle submit for", "id", *cardID, card)
 		state := m.fsrs.Repeat(card.ToFsrsCard(), time.Now())
 		m.lookup[*cardID].SyncFromFSRSCard(state[*rating].Card)
-		fmt.Println("after", card)
 		return model.PayloadResponse("updated")
 	}
 
@@ -246,7 +251,6 @@ func (m *SpacedManager) JSStats(js.Value, []js.Value) any {
 		eles[i] = session.ToHTML()
 	}
 	slices.Reverse(eles)
-	fmt.Println(eles)
 	data := struct {
 		Sessions []template.HTML
 	}{
@@ -256,7 +260,6 @@ func (m *SpacedManager) JSStats(js.Value, []js.Value) any {
 	if err := tmpl.Execute(buf, data); err != nil {
 		return model.ErrorResponse("failed to execute" + err.Error())
 	}
-	fmt.Println(buf.String())
 	return js.ValueOf(buf.String())
 }
 

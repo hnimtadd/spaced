@@ -39,6 +39,15 @@
 
         <script src=" ./wasm_exec.js"></script>
         <script src="./main.js"></script>
+        <script>
+            const crafter = new Crafter();
+
+            globalThis.onload = async () => {
+                await crafter.init();
+                crafter.start();
+            };
+        </script>
+
 </body>
 
 </html>

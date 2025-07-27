@@ -88,6 +88,16 @@
 
     <script src="./wasm_exec.js"></script>
     <script src="./main.js"></script>
+    <script>
+        const crafter = new Crafter();
+        const worker = new Worker(crafter);
+
+        globalThis.onload = async () => {
+            await crafter.init();
+            crafter.start();
+            worker.start();
+        };
+    </script>
 </body>
 
 </html>

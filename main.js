@@ -18,6 +18,7 @@ class Crafter {
       this.isReady = true;
       console.info("Crafter: initialized");
       console.log(this.wasmBridge);
+      this.call("init");
     } catch (err) {
       console.error(`Crafter: Error loading Go WASM module: ${err}`);
     }
@@ -35,10 +36,9 @@ class Crafter {
       return;
     }
     const method = ele.getAttribute("craft-name");
-    console.log(method);
+    console.log("craft-call", method);
 
     const handler = this.wasmBridge[method];
-    console.log(handler);
     if (!handler && typeof handler !== "function") {
       console.log("WASM method not found");
       return;
@@ -50,7 +50,6 @@ class Crafter {
       case "this":
         ele.innerHTML = result;
     }
-    console.log(result);
   }
 
   call(name, ...args) {
@@ -79,10 +78,6 @@ class Worker {
     this.crafter = crafter;
     this.currCard = null;
     this.isReady = false;
-  }
-
-  init() {
-    this.crafter.call("init");
   }
 
   start() {
@@ -170,12 +165,3 @@ class Worker {
     this.handleUpdateCard();
   }
 }
-const crafter = new Crafter();
-const worker = new Worker(crafter);
-
-globalThis.onload = async () => {
-  await crafter.init();
-  worker.init();
-  crafter.start();
-  worker.start();
-};
