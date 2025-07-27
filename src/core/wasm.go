@@ -6,13 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
+	"html/template"
 	"sort"
+	"strings"
 	"syscall/js"
 	"time"
 
 	internalfsrs "github.com/hnimtadd/spaced/src/core/fsrs"
 	"github.com/hnimtadd/spaced/src/core/model"
+	"github.com/hnimtadd/spaced/src/core/session"
 	"github.com/hnimtadd/spaced/src/core/utils"
 	"github.com/open-spaced-repetition/go-fsrs/v3"
 )
@@ -22,11 +24,10 @@ type SpacedManager struct {
 	localStorage js.Value
 	fsrs         *fsrs.FSRS
 
-	sessionCards internalfsrs.Cards
+	targetNum   int
+	currSession *session.Session
 
-	schedulingCards fsrs.RecordLog
-	againsID        map[int]bool
-	targetNum       int
+	records []session.Record
 }
 
 func NewSpacedManger() (*SpacedManager, error) {
@@ -39,13 +40,12 @@ func NewSpacedManger() (*SpacedManager, error) {
 		localStorage: localStorage,
 		fsrs:         fsrss,
 		targetNum:    10,
-		againsID:     map[int]bool{},
+		records:      []session.Record{},
 	}
-	m.init()
 	return m, nil
 }
 
-func (m *SpacedManager) init() {
+func (m *SpacedManager) JSInit(js.Value, []js.Value) any {
 	if err := m.handlePullState(); err != nil {
 		fmt.Println("could not pull the state from localStorage try to fetch")
 
@@ -64,52 +64,48 @@ func (m *SpacedManager) init() {
 				if err := json.Unmarshal([]byte(jsonString), &m.cards); err != nil {
 					fmt.Println("failed to unmarshal cards:", err)
 				} else {
+					for i := range m.cards {
+						m.cards[i].ID = i
+					}
 					m.handlePushState()
 					fmt.Println("cards loaded successfully")
 				}
-				return nil
+				return js.ValueOf(nil)
 			}))
 		}()
 	}
 
 	// hack, indexing cards on init
-	for i := range m.cards {
-		m.cards[i].ID = i
-	}
 	fmt.Println("pull state from localStorage completed")
-}
-
-func (m *SpacedManager) shouldStop() bool {
-	if len(m.againsID) > 0 {
-		return false
-	}
-	for card := range slices.Values(m.sessionCards) {
-		if card.Due.Before(time.Now()) {
-			return false
-		}
-		if card.LastReview.IsZero() {
-			return false
-		}
-	}
-	return true
+	return js.ValueOf(nil)
 }
 
 // startSession based on the list of most urgent due date cards
 // prepare the list of cards to be review in this session.
-func (m *SpacedManager) startSession(js.Value, []js.Value) any {
+func (m *SpacedManager) startSession() any {
 	sort.Sort(internalfsrs.Cards(m.cards))
-	len := min(m.targetNum, len(m.cards))
-	m.sessionCards = make(internalfsrs.Cards, len)
-	for i := range len {
-		m.sessionCards[i] = m.cards[i]
+	numCards := min(m.targetNum, len(m.cards))
+	session := &session.Session{
+		Cards: make(internalfsrs.Cards, numCards), AgainsID: map[int]bool{},
+		StartedAt: time.Now(),
 	}
+	for i := range numCards {
+		session.Cards[i] = m.cards[i]
+	}
+	m.currSession = session
 	return model.PayloadResponse("success")
 }
 
-// handlePullState pull the state passed from web browser.
-func (m *SpacedManager) handlePullState() error {
-	fmt.Println("handle pull state from localStorage")
-	dataRaw := m.localStorage.Call("getItem", "flashcards")
+func (m *SpacedManager) completeSession() {
+	record := session.NewRecordFromSession(m.currSession)
+	m.currSession = nil
+	m.records = append(m.records, record)
+	m.push("records", m.records)
+	m.push("flashcards", m.cards)
+}
+
+func (m *SpacedManager) pull(key string, to any) error {
+	dataRaw := m.localStorage.Call("getItem", key)
 	if !dataRaw.Truthy() {
 		return errors.New("flashcards in localStorage is in invalid form")
 	}
@@ -117,40 +113,70 @@ func (m *SpacedManager) handlePullState() error {
 	if data == "" {
 		return errors.New("empty flashcards item, skipping")
 	}
+	err := utils.DeserializeTo([]byte(data), to)
+	if err != nil {
+		return errors.New("could not deserialize the data, got: " + err.Error())
+	}
+	return nil
+}
 
-	if err := json.Unmarshal([]byte(data), &m.cards); err != nil {
-		return errors.New("could not unmarshal the data, got: " + err.Error())
+func (m *SpacedManager) push(key string, data any) error {
+	dataBytes, err := utils.Serialize(data)
+	if err != nil {
+		return fmt.Errorf("failed to push state to localStorage: %w", err)
 	}
 
+	m.localStorage.Call("setItem", key, string(dataBytes))
+	fmt.Println("handle push state to localStorage, complete")
+	return nil
+}
+
+// handlePullState pull the state passed from web browser.
+func (m *SpacedManager) handlePullState() error {
+	fmt.Println("handle pull state from localStorage")
+	if err := m.pull("flashcards", &m.cards); err != nil {
+		return fmt.Errorf("failed to pull flashcards, err: %v", err)
+	}
+	if err := m.pull("records", &m.records); err != nil {
+		return fmt.Errorf("failed to pull sessions, err: %v", err)
+	}
 	return nil
 }
 
 // handlePushState push the state from wasm land to js land
 func (m *SpacedManager) handlePushState() error {
 	fmt.Println("handle push state to localStorage")
-	dataBytes, err := json.Marshal(m.cards)
-	if err != nil {
-		return fmt.Errorf("failed to push state to localStorage: %w", err)
+	if err := m.push("flashcards", &m.cards); err != nil {
+		return fmt.Errorf("failed to push flashcards, err: %v", err)
 	}
-
-	m.localStorage.Call("setItem", "flashcards", string(dataBytes))
-	fmt.Println("handle push state to localStorage, complete")
+	if err := m.push("records", &m.records); err != nil {
+		return fmt.Errorf("failed to push sessions, err: %v", err)
+	}
 	return nil
 }
 
-func (m *SpacedManager) next(_ js.Value, args []js.Value) any {
+func (m *SpacedManager) next() any {
 	if len(m.cards) == 0 {
 		return model.ErrorResponse("no cards found")
 	}
-	if m.shouldStop() {
+	if m.currSession == nil {
+		return model.ErrorResponse("not start session yet")
+	}
+
+	if m.currSession.ShouldStop() {
+		m.completeSession()
 		return model.StopResponse()
 	}
 
-	sort.Sort(m.sessionCards)
-	return cardToJsValue(m.sessionCards[0])
+	sort.Sort(m.currSession.Cards)
+	return cardToJsValue(m.currSession.Cards[0])
 }
 
-func (m *SpacedManager) submit(this js.Value, args []js.Value) any {
+func (m *SpacedManager) JSNext(_ js.Value, _ []js.Value) any {
+	return m.next()
+}
+
+func (m *SpacedManager) JSSubmit(_ js.Value, args []js.Value) any {
 	if len(args) < 2 {
 		return model.ErrorResponse("must provide card ID and rating")
 	}
@@ -166,9 +192,9 @@ func (m *SpacedManager) submit(this js.Value, args []js.Value) any {
 	}
 	if *rating != 0 {
 		if *rating == fsrs.Again {
-			m.againsID[*cardID] = true
+			m.currSession.AgainsID[*cardID] = true
 		} else {
-			delete(m.againsID, *cardID)
+			delete(m.currSession.AgainsID, *cardID)
 		}
 		// assume that we have a very little latency, from when the user provide
 		// feedback to when this path is reached.
@@ -191,13 +217,34 @@ func cardToJsValue(card *model.Card) any {
 	return model.PayloadResponse(string(jsonBytes))
 }
 
-func (m *SpacedManager) start(js.Value, []js.Value) any {
-	m.startSession(js.Value{}, []js.Value{})
-	return m.next(js.Value{}, []js.Value{})
+func (m *SpacedManager) JSStart(js.Value, []js.Value) any {
+	m.startSession()
+	return m.next()
 }
 
-func helloworld(js.Value, []js.Value) any {
-	return js.ValueOf("Helloworld")
+func (m *SpacedManager) JSStats(js.Value, []js.Value) any {
+	tpl := `<div class="max-w-5xl sm:w-[30rem] md:w-[40rem] lg:w-[50rem] mx-auto h-screen overflow-y-auto p-4 space-y-4">{{range .Sessions}}{{.}}{{end}}</div>`
+	tmpl, err := template.New("stats").Parse(tpl)
+	if err != nil {
+		return model.ErrorResponse("failed to init tmpl: " + err.Error())
+	}
+	eles := make([]template.HTML, len(m.records))
+
+	for i, session := range m.records {
+		eles[i] = session.ToHTML()
+	}
+	fmt.Println(eles)
+	data := struct {
+		Sessions []template.HTML
+	}{
+		Sessions: eles,
+	}
+	buf := &strings.Builder{}
+	if err := tmpl.Execute(buf, data); err != nil {
+		return model.ErrorResponse("failed to execute" + err.Error())
+	}
+	fmt.Println(buf.String())
+	return js.ValueOf(buf.String())
 }
 
 func main() {
@@ -210,10 +257,11 @@ func main() {
 
 	// Map of exposed Go methods for easy lookup in JS land.
 	goFuncs := map[string]js.Func{
-		"start":  js.FuncOf(m.start),
-		"next":   js.FuncOf(m.next),
-		"submit": js.FuncOf(m.submit),
-		"stats":  js.FuncOf(helloworld),
+		"init":   js.FuncOf(m.JSInit),
+		"start":  js.FuncOf(m.JSStart),
+		"next":   js.FuncOf(m.JSNext),
+		"submit": js.FuncOf(m.JSSubmit),
+		"stats":  js.FuncOf(m.JSStats),
 	}
 
 	wasmBridge := js.Global().Get("Object").New()

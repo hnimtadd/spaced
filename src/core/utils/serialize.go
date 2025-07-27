@@ -11,10 +11,17 @@ func Deserialize[To any](from []byte) (*To, error) {
 	return to, nil
 }
 
-func Serialize[To any](from To) ([]byte, error) {
+func Serialize[From any](from From) ([]byte, error) {
 	result, err := json.Marshal(from)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
+}
+
+func DeserializeTo[To any](from []byte, to To) error {
+	if err := json.Unmarshal(from, to); err != nil {
+		return err
+	}
+	return nil
 }

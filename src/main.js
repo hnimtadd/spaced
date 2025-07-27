@@ -18,13 +18,15 @@ class Crafter {
       this.isReady = true;
       console.info("Crafter: initialized");
       console.log(this.wasmBridge);
-
-      document.querySelectorAll("[craft-name]").forEach((ele) => {
-        this.handle(ele);
-      });
     } catch (err) {
       console.error(`Crafter: Error loading Go WASM module: ${err}`);
     }
+  }
+
+  start() {
+    document.querySelectorAll("[craft-name]").forEach((ele) => {
+      this.handle(ele);
+    });
   }
 
   handle(ele) {
@@ -80,6 +82,7 @@ class Worker {
   }
 
   init() {
+    this.crafter.call("init");
     const startBtn = document.getElementById("start-btn");
     if (startBtn) {
       startBtn.addEventListener("click", this.start.bind(this));
@@ -186,4 +189,5 @@ const worker = new Worker(crafter);
 globalThis.onload = async () => {
   await crafter.init();
   worker.init();
+  crafter.start();
 };

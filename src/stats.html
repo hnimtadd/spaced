@@ -10,13 +10,23 @@
 </head>
 
 <body class="bg-gray-100 font-sans flex flex-col min-h-screen">
-    <div id="end-screen" class="flex-grow flex flex-col items-center justify-center">
-        <h1 class="text-4xl font-bold mb-8">Completed</h1>
-        <div craft-name="stats" craft-target="this"></div>
-    </div>
+    <div id="app" class="flex-grow">
+        <nav class="bg-white shadow-md fixed w-screen h-18">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex-shrink-0">
+                        <h1 class="text-2xl font-bold text-gray-800"><a href="/">Spaced</a></h1>
+                    </div>
+                </div>
+            </div>
+        </nav>
 
-    <script src="./wasm_exec.js"></script>
-    <script src="./main.js"></script>
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+            <div craft-name="stats" craft-target="this"></div>
+        </main>
+
+        <script src=" ./wasm_exec.js"></script>
+        <script src="./main.js"></script>
 </body>
 
 </html>
