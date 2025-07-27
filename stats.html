@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Spaced</title>
+    <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 font-sans flex flex-col min-h-screen">
+    <div id="app" class="flex-grow">
+        <nav class="bg-white shadow-md fixed w-screen h-18">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex-shrink-0">
+                        <h1 class="text-2xl font-bold text-gray-800"><a href="/">Spaced</a></h1>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+            <div craft-name="stats" craft-target="this"></div>
+        </main>
+
+        <footer class="py-6 fixed bottom-0 w-screen">
+            <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-center items-center space-x-4">
+                <a href="/session" id="new-session-btn"
+                    class="p-5 bg-blue-500 rounded-full  hover:bg-blue-700 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 fill-gray-800" viewBox="0 0 512 512">
+                        <path
+                            d="M480.1 192l7.9 0c13.3 0 24-10.7 24-24l0-144c0-9.7-5.8-18.5-14.8-22.2S477.9 .2 471 7L419.3 58.8C375 22.1 318 0 256 0 127 0 20.3 95.4 2.6 219.5 .1 237 12.2 253.2 29.7 255.7s33.7-9.7 36.2-27.1C79.2 135.5 159.3 64 256 64 300.4 64 341.2 79 373.7 104.3L327 151c-6.9 6.9-8.9 17.2-5.2 26.2S334.3 192 344 192l136.1 0zm29.4 100.5c2.5-17.5-9.7-33.7-27.1-36.2s-33.7 9.7-36.2 27.1c-13.3 93-93.4 164.5-190.1 164.5-44.4 0-85.2-15-117.7-40.3L185 361c6.9-6.9 8.9-17.2 5.2-26.2S177.7 320 168 320L24 320c-13.3 0-24 10.7-24 24L0 488c0 9.7 5.8 18.5 14.8 22.2S34.1 511.8 41 505l51.8-51.8C137 489.9 194 512 256 512 385 512 491.7 416.6 509.4 292.5z" />
+                    </svg>
+                </a>
+            </div>
+        </footer>
+
+        <script src=" ./wasm_exec.js"></script>
+        <script src="./main.js"></script>
+</body>
+
+</html>

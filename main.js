@@ -1,0 +1,181 @@
+class Crafter {
+  constructor() {
+    this.go = null;
+    this.wasmBridge = null;
+    this.isReady = null;
+  }
+
+  async init() {
+    this.isReady = false;
+    this.go = new Go();
+    try {
+      const result = await WebAssembly.instantiateStreaming(
+        fetch("/assets/main.wasm"),
+        this.go.importObject,
+      );
+      this.go.run(result.instance);
+      this.wasmBridge = globalThis.wasmBridge;
+      this.isReady = true;
+      console.info("Crafter: initialized");
+      console.log(this.wasmBridge);
+    } catch (err) {
+      console.error(`Crafter: Error loading Go WASM module: ${err}`);
+    }
+  }
+
+  start() {
+    document.querySelectorAll("[craft-name]").forEach((ele) => {
+      this.handle(ele);
+    });
+  }
+
+  handle(ele) {
+    if (this.isReady === false) {
+      console.error("crafter: instance is not ready");
+      return;
+    }
+    const method = ele.getAttribute("craft-name");
+    console.log(method);
+
+    const handler = this.wasmBridge[method];
+    console.log(handler);
+    if (!handler && typeof handler !== "function") {
+      console.log("WASM method not found");
+      return;
+    }
+    const result = handler();
+    const target = ele.getAttribute("craft-target");
+    switch (target) {
+      case "":
+      case "this":
+        ele.innerHTML = result;
+    }
+    console.log(result);
+  }
+
+  call(name, ...args) {
+    if (!this.isReady || !this.wasmBridge) {
+      const errMsg = `Bridge not ready.`;
+      console.error(errMsg);
+      throw new Error(errMsg);
+    }
+    if (!this.wasmBridge[name] && typeof this.wasmBridge[name] !== "function") {
+      const errMsg = `WASM '${name}' not found or in invalid type.`;
+      console.error(errMsg);
+      throw new Error(errMsg);
+    }
+
+    try {
+      const result = this.wasmBridge[name](...args);
+      return result;
+    } catch (err) {
+      console.error(`Error calling WASM method: '${name}'`, err);
+      throw err;
+    }
+  }
+}
+class Worker {
+  constructor(crafter) {
+    this.crafter = crafter;
+    this.currCard = null;
+    this.isReady = false;
+  }
+
+  init() {
+    this.crafter.call("init");
+  }
+
+  start() {
+    const response = this.crafter.call("start");
+    if (response.error) {
+      console.error(response.error);
+      return;
+    }
+    if (response.payload) {
+      console.log(response);
+    }
+    this.handleFetchCard();
+    this.handleUpdateCard();
+
+    try {
+      this.isReady = false;
+      this.isReady = true;
+
+      // Event Listeners
+      flashcard.addEventListener("click", this.flipCard.bind(this));
+
+      const ratingBtns = document.querySelectorAll(".rating-btn");
+      ratingBtns.forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          const rating = e.target.dataset.rating;
+          this.handleSubmitReview(rating);
+          this.nextCard();
+        });
+      });
+
+      this.handleUpdateCard();
+    } catch (err) {
+      console.error("Error fetching or parsing JSON:", err);
+    }
+  }
+  stop() {
+    const app = document.getElementById("app");
+    app.classList.add("hidden");
+    globalThis.location.assign("/stats");
+  }
+  handleUpdateCard() {
+    const wordEl = document.getElementById("word");
+    const definitionEl = document.getElementById("definition");
+    const exampleEl = document.getElementById("example");
+    const flashcard = document.getElementById("flashcard");
+    wordEl.textContent = this.currentCard.word;
+    definitionEl.textContent = this.currentCard.definition;
+    exampleEl.textContent = `"${this.currentCard.example}"`;
+    flashcard.classList.remove("rotate-y-180");
+  }
+
+  handleFetchCard() {
+    const response = this.crafter.call("next");
+    if (response.error) {
+      console.error(response.error);
+      return;
+    }
+    if (response.stop) {
+      this.stop();
+      console.log("stop");
+      return;
+    }
+    if (response.payload) {
+      this.currentCard = JSON.parse(response.payload);
+      console.log(this.currentCard);
+    }
+  }
+
+  flipCard() {
+    const flashcard = document.getElementById("flashcard");
+    flashcard.classList.toggle("rotate-y-180");
+  }
+
+  handleSubmitReview(rating) {
+    const response = this.crafter.call(
+      "submit",
+      JSON.stringify(this.currentCard.ID),
+      JSON.stringify(parseInt(rating)),
+    );
+    console.log(response);
+  }
+
+  nextCard() {
+    this.handleFetchCard();
+    this.handleUpdateCard();
+  }
+}
+const crafter = new Crafter();
+const worker = new Worker(crafter);
+
+globalThis.onload = async () => {
+  await crafter.init();
+  worker.init();
+  crafter.start();
+  worker.start();
+};
