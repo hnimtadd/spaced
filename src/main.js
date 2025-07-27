@@ -83,40 +83,26 @@ class Worker {
 
   init() {
     this.crafter.call("init");
-    const startBtn = document.getElementById("start-btn");
-    if (startBtn) {
-      startBtn.addEventListener("click", this.start.bind(this));
-    }
   }
 
   start() {
-    const startScreen = document.getElementById("start-screen");
-    const app = document.getElementById("app");
-
-    startScreen.classList.add("hidden");
-    app.classList.remove("hidden");
-
     const response = this.crafter.call("start");
     if (response.error) {
       console.error(response.error);
       return;
     }
-    this.currentCard = JSON.parse(response.payload);
+    if (response.payload) {
+      console.log(response);
+    }
+    this.handleFetchCard();
     this.handleUpdateCard();
 
     try {
       this.isReady = false;
       this.isReady = true;
 
-      // this.handlePushStateToWasm();
-      const nextBtn = document.getElementById("next-btn");
-
       // Event Listeners
       flashcard.addEventListener("click", this.flipCard.bind(this));
-      nextBtn.addEventListener("click", (_) => {
-        this.handleSubmitReview(1);
-        this.nextCard();
-      });
 
       const ratingBtns = document.querySelectorAll(".rating-btn");
       ratingBtns.forEach((btn) => {
@@ -171,11 +157,12 @@ class Worker {
   }
 
   handleSubmitReview(rating) {
-    this.crafter.call(
+    const response = this.crafter.call(
       "submit",
       JSON.stringify(this.currentCard.ID),
       JSON.stringify(parseInt(rating)),
     );
+    console.log(response);
   }
 
   nextCard() {
@@ -190,4 +177,5 @@ globalThis.onload = async () => {
   await crafter.init();
   worker.init();
   crafter.start();
+  worker.start();
 };

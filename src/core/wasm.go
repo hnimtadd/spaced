@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"slices"
 	"sort"
 	"strings"
 	"syscall/js"
@@ -21,6 +22,7 @@ import (
 
 type SpacedManager struct {
 	cards        internalfsrs.Cards
+	lookup       map[int]*model.Card
 	localStorage js.Value
 	fsrs         *fsrs.FSRS
 
@@ -41,6 +43,7 @@ func NewSpacedManger() (*SpacedManager, error) {
 		fsrs:         fsrss,
 		targetNum:    10,
 		records:      []session.Record{},
+		lookup:       map[int]*model.Card{},
 	}
 	return m, nil
 }
@@ -51,7 +54,7 @@ func (m *SpacedManager) JSInit(js.Value, []js.Value) any {
 
 		// Use a Go routine to fetch the cards data without blocking the main thread.
 		go func() {
-			respPromise := js.Global().Call("fetch", "/assets/cards_sample.json")
+			respPromise := js.Global().Call("fetch", "/assets/cards.json")
 
 			// Handle the promise returned by fetch.
 			respPromise.Call("then", js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -64,18 +67,25 @@ func (m *SpacedManager) JSInit(js.Value, []js.Value) any {
 				if err := json.Unmarshal([]byte(jsonString), &m.cards); err != nil {
 					fmt.Println("failed to unmarshal cards:", err)
 				} else {
+					// hack, indexing cards on init
 					for i := range m.cards {
 						m.cards[i].ID = i
 					}
 					m.handlePushState()
+					for card := range slices.Values(m.cards) {
+						m.lookup[card.ID] = card
+					}
 					fmt.Println("cards loaded successfully")
 				}
 				return js.ValueOf(nil)
 			}))
 		}()
+		return js.ValueOf(nil)
 	}
 
-	// hack, indexing cards on init
+	for card := range slices.Values(m.cards) {
+		m.lookup[card.ID] = card
+	}
 	fmt.Println("pull state from localStorage completed")
 	return js.ValueOf(nil)
 }
@@ -85,14 +95,13 @@ func (m *SpacedManager) JSInit(js.Value, []js.Value) any {
 func (m *SpacedManager) startSession() any {
 	sort.Sort(internalfsrs.Cards(m.cards))
 	numCards := min(m.targetNum, len(m.cards))
-	session := &session.Session{
-		Cards: make(internalfsrs.Cards, numCards), AgainsID: map[int]bool{},
-		StartedAt: time.Now(),
-	}
+	cards := make(internalfsrs.Cards, numCards)
+
 	for i := range numCards {
-		session.Cards[i] = m.cards[i]
+		cards[i] = m.cards[i]
 	}
-	m.currSession = session
+
+	m.currSession = session.NewSession(cards)
 	return model.PayloadResponse("success")
 }
 
@@ -169,7 +178,13 @@ func (m *SpacedManager) next() any {
 	}
 
 	sort.Sort(m.currSession.Cards)
-	return cardToJsValue(m.currSession.Cards[0])
+
+	card := m.currSession.Cards[0]
+	jsonBytes, err := utils.Serialize(card)
+	if err != nil {
+		return model.ErrorResponse("could not marshal the card, got: " + err.Error())
+	}
+	return model.PayloadResponse(string(jsonBytes))
 }
 
 func (m *SpacedManager) JSNext(_ js.Value, _ []js.Value) any {
@@ -190,6 +205,7 @@ func (m *SpacedManager) JSSubmit(_ js.Value, args []js.Value) any {
 	if err != nil {
 		return model.ErrorResponse("invalid rating: " + err.Error())
 	}
+	m.currSession.Looked[*cardID] = true
 	if *rating != 0 {
 		if *rating == fsrs.Again {
 			m.currSession.AgainsID[*cardID] = true
@@ -199,31 +215,27 @@ func (m *SpacedManager) JSSubmit(_ js.Value, args []js.Value) any {
 		// assume that we have a very little latency, from when the user provide
 		// feedback to when this path is reached.
 		// so using current timestamp
-		fmt.Println("handle submit for", "id", *cardID, m.cards[*cardID])
-		state := m.fsrs.Repeat(m.cards[*cardID].ToFsrsCard(), time.Now())
-		m.cards[*cardID].SyncFromFSRSCard(state[*rating].Card)
-		fmt.Println("after", m.cards[*cardID])
+		card, exists := m.lookup[*cardID]
+		if !exists {
+			return model.ErrorResponse("submit for not exists card")
+		}
+		fmt.Println("handle submit for", "id", *cardID, card)
+		state := m.fsrs.Repeat(card.ToFsrsCard(), time.Now())
+		m.lookup[*cardID].SyncFromFSRSCard(state[*rating].Card)
+		fmt.Println("after", card)
 		return model.PayloadResponse("updated")
 	}
 
 	return model.PayloadResponse("not updated")
 }
 
-func cardToJsValue(card *model.Card) any {
-	jsonBytes, err := utils.Serialize(card)
-	if err != nil {
-		return model.ErrorResponse("could not marshal the card, got: " + err.Error())
-	}
-	return model.PayloadResponse(string(jsonBytes))
-}
-
 func (m *SpacedManager) JSStart(js.Value, []js.Value) any {
 	m.startSession()
-	return m.next()
+	return model.PayloadResponse("ready")
 }
 
 func (m *SpacedManager) JSStats(js.Value, []js.Value) any {
-	tpl := `<div class="max-w-5xl sm:w-[30rem] md:w-[40rem] lg:w-[50rem] mx-auto h-screen overflow-y-auto p-4 space-y-4">{{range .Sessions}}{{.}}{{end}}</div>`
+	tpl := `<div class="max-w-5xl sm:w-[30rem] md:w-[40rem] lg:w-[50rem] mx-auto h-screen p-4 space-y-4">{{range .Sessions}}{{.}}{{end}}</div>`
 	tmpl, err := template.New("stats").Parse(tpl)
 	if err != nil {
 		return model.ErrorResponse("failed to init tmpl: " + err.Error())
@@ -233,6 +245,7 @@ func (m *SpacedManager) JSStats(js.Value, []js.Value) any {
 	for i, session := range m.records {
 		eles[i] = session.ToHTML()
 	}
+	slices.Reverse(eles)
 	fmt.Println(eles)
 	data := struct {
 		Sessions []template.HTML

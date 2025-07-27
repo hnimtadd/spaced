@@ -16,11 +16,26 @@ type Session struct {
 
 	AgainsID map[int]bool
 
+	Looked map[int]bool
+
 	StartedAt time.Time
+}
+
+func NewSession(cards fsrs.Cards) *Session {
+	return &Session{
+		Cards:     cards,
+		AgainsID:  map[int]bool{},
+		Looked:    map[int]bool{},
+		StartedAt: time.Now(),
+	}
 }
 
 func (s Session) ShouldStop() bool {
 	if len(s.AgainsID) > 0 {
+		return false
+	}
+	// gurantee every cards need to be take a looked at least 1 time.
+	if len(s.Looked) != len(s.Cards) {
 		return false
 	}
 	for card := range slices.Values(s.Cards) {
