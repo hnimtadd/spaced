@@ -120,9 +120,11 @@ class Worker {
   }
   handleUpdateCard() {
     const wordEl = document.getElementById("word");
+    const ipaEl = document.getElementById("ipa");
     const definitionEl = document.getElementById("definition");
     const exampleEl = document.getElementById("example");
     const flashcard = document.getElementById("flashcard");
+    ipaEl.textContent = this.currentCard.ipa;
     wordEl.textContent = this.currentCard.word;
     definitionEl.textContent = this.currentCard.definition;
     exampleEl.textContent = `"${this.currentCard.example}"`;
