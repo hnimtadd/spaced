@@ -2,7 +2,7 @@
   "version": 2,
   "public": true,
   "functions": {
-    "src/apis/sound/index.go": {
+    "api/sound/index.go": {
       "memory": 512,
       "maxDuration": 30
     }
