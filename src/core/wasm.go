@@ -50,7 +50,6 @@ func NewSpacedManger() (*SpacedManager, error) {
 
 func (m *SpacedManager) JSInit(js.Value, []js.Value) any {
 	if err := m.handlePullState(); err != nil {
-		fmt.Println("could not pull the state from localStorage try to fetch")
 
 		// Use a Go routine to fetch the cards data without blocking the main thread.
 		go func() {
@@ -92,7 +91,6 @@ func (m *SpacedManager) JSInit(js.Value, []js.Value) any {
 	for card := range slices.Values(m.cards) {
 		m.lookup[card.ID] = card
 	}
-	fmt.Println("pull state from localStorage completed")
 	return js.ValueOf(nil)
 }
 
@@ -142,13 +140,11 @@ func (m *SpacedManager) push(key string, data any) error {
 	}
 
 	m.localStorage.Call("setItem", key, string(dataBytes))
-	fmt.Println("handle push state to localStorage, complete")
 	return nil
 }
 
 // handlePullState pull the state passed from web browser.
 func (m *SpacedManager) handlePullState() error {
-	fmt.Println("handle pull state from localStorage")
 	if err := m.pull("flashcards", &m.cards); err != nil {
 		return fmt.Errorf("failed to pull flashcards, err: %v", err)
 	}
@@ -160,7 +156,6 @@ func (m *SpacedManager) handlePullState() error {
 
 // handlePushState push the state from wasm land to js land
 func (m *SpacedManager) handlePushState() error {
-	fmt.Println("handle push state to localStorage")
 	if err := m.push("flashcards", &m.cards); err != nil {
 		return fmt.Errorf("failed to push flashcards, err: %v", err)
 	}

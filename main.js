@@ -124,11 +124,19 @@ class Worker {
     const definitionEl = document.getElementById("definition");
     const exampleEl = document.getElementById("example");
     const flashcard = document.getElementById("flashcard");
+    const playIPASoundEl = document.getElementById("play-ipa");
     ipaEl.textContent = this.currentCard.ipa;
     wordEl.textContent = this.currentCard.word;
     definitionEl.textContent = this.currentCard.definition;
     exampleEl.textContent = `"${this.currentCard.example}"`;
     flashcard.classList.remove("rotate-y-180");
+
+    playIPASoundEl.addEventListener("click", (ev) => {
+      // stop this ev propagating to parent object.
+      ev.stopPropagation();
+      // blur the focus status immediately.
+      playIPASoundEl.blur();
+    });
   }
 
   handleFetchCard() {

@@ -1,6 +1,12 @@
 {
   "version": 2,
   "public": true,
+  "functions": {
+    "src/apis/sound/index.go": {
+      "memory": 3009,
+      "maxDuration": 30
+    }
+  },
   "routes": [
     {
       "src": "/stats",
