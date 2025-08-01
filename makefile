@@ -1,6 +1,6 @@
 .PHONY: server
 server:
-	nix-shell -p http-server --command 'http-server -c-1 -p 8080'
+	go run ./cmd/server/main.go
 
 .PHONY: wasm
 wasm:
