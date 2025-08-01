@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -69,5 +70,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	resp, _ := http.DefaultClient.Do(req)
 	defer func() { _ = resp.Body.Close() }()
-	io.Copy(w, resp.Body)
+	respBytes, _ := io.ReadAll(resp.Body)
+	soundPayload := base64.RawStdEncoding.EncodeToString(respBytes)
+	jsonResponse(w, map[string]any{"payload": soundPayload})
 }
