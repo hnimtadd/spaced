@@ -1,3 +1,32 @@
+function parseCraftAddress(addr) {
+  if (!addr) return null;
+  addr = addr.trim();
+
+  // Match for selector:....
+  let selector;
+  const selectorMatch = addr.match(/^(.*?):.*$/);
+  if (selectorMatch) {
+    selector = selectorMatch[1].trim();
+  }
+
+  let property;
+  const propertyMatch = addr.match(/^.*:(.*)?$/);
+  if (propertyMatch) {
+    property = propertyMatch[2].trimg();
+  }
+  if (property && property.beginWith("[")) {
+    return {
+      selector: selector,
+      attr: attr,
+    };
+  } else {
+    return {
+      selector: selector,
+      property: attr,
+    };
+  }
+}
+
 class Crafter {
   constructor() {
     this.go = null;
@@ -43,12 +72,61 @@ class Crafter {
       console.log("WASM method not found");
       return;
     }
-    const result = handler();
-    const target = ele.getAttribute("craft-target");
-    switch (target) {
+
+    const f = () => {
+      let input;
+      let found = false;
+      const inputID = ele.getAttribute("craft-input");
+      if (inputID) {
+        const inputEl = document.getElementById(inputID);
+        if (inputEl) {
+          input = inputEl.innerText;
+          found = true;
+        }
+      }
+
+      let result;
+      switch (found) {
+        case true:
+          result = handler(input);
+          break;
+        case false:
+          result = handler();
+          break;
+      }
+
+      const target = ele.getAttribute("craft-target");
+      const { selector, attribute } = parseTarget(target);
+      let targetEl;
+      switch (selector) {
+        case "":
+        case "this":
+          targetEl = ele;
+          break;
+        default:
+          targetEl = document.getElementById(selector);
+          break;
+      }
+
+      switch (attribute) {
+        case "":
+          targetEl.innerText = result;
+          break;
+        default:
+          targetEl.setAttribute(attribute, result);
+          break;
+      }
+    };
+    const trigger = ele.getAttribute("craft-trigger");
+    switch (trigger) {
       case "":
-      case "this":
-        ele.innerHTML = result;
+        f();
+        return;
+      case "click":
+        ele.addEventListener("click", () => {
+          f();
+        });
+        return;
     }
   }
 
