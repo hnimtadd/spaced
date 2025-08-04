@@ -1,30 +1,48 @@
+const WASM_URL = "/assets/main.wasm";
+
 function parseCraftAddress(addr) {
   if (!addr) return null;
   addr = addr.trim();
 
-  // Match for selector:....
-  let selector;
-  const selectorMatch = addr.match(/^(.*?):.*$/);
-  if (selectorMatch) {
-    selector = selectorMatch[1].trim();
+  const parts = addr.split(":");
+  console.log(parts.length);
+  if (parts.lenth > 2 || parts.lenth <= 0) {
+    throw Error("unsupported address");
   }
+  const el = parts[0];
+  if (parts.length == 2) {
+    const property = parts[1];
+    return {
+      el: el,
+      prop: property,
+    };
+  }
+  return {
+    el: el,
+    prop: "innerText",
+  };
+}
 
-  let property;
-  const propertyMatch = addr.match(/^.*:(.*)?$/);
-  if (propertyMatch) {
-    property = propertyMatch[2].trimg();
-  }
-  if (property && property.beginWith("[")) {
-    return {
-      selector: selector,
-      attr: attr,
-    };
-  } else {
-    return {
-      selector: selector,
-      property: attr,
-    };
-  }
+function parseCraftInput(input) {
+  // craft-input="#ipa:innerText,#ipa:[data]"
+  if (!input) return null;
+  input = input.trim();
+  const parts = input.split(",");
+  return parts.map((item) => {
+    item = item.trim();
+    const parsed = parseCraftAddress(item);
+    const el = document.querySelector(parsed.el);
+    if (!el) return "";
+
+    if (parsed.prop in el) {
+      return el[parsed.prop];
+    }
+
+    if (parsed.prop.startsWith("[") && parsed.prop.endsWith("]")) {
+      return el.getAttribute(parsed.prop.slice(1, parsed.prop.length - 1));
+    }
+    return "";
+  });
 }
 
 class Crafter {
@@ -38,15 +56,23 @@ class Crafter {
     this.isReady = false;
     this.go = new Go();
     try {
+      if (!("instantiateStreaming" in WebAssembly)) {
+        WebAssembly.instantiateStreaming = (responsePromise, importObject) => {
+          responsePromise
+            .then((resp) => resp.arrayBuffer())
+            .then((bytes) => WebAssembly.instantiate(bytes, importObject));
+        };
+      }
+
       const result = await WebAssembly.instantiateStreaming(
-        fetch("/assets/main.wasm"),
+        fetch(WASM_URL),
         this.go.importObject,
       );
+      console.info(result);
       this.go.run(result.instance);
       this.wasmBridge = globalThis.wasmBridge;
       this.isReady = true;
       console.info("Crafter: initialized");
-      console.log(this.wasmBridge);
       this.call("init");
     } catch (err) {
       console.error(`Crafter: Error loading Go WASM module: ${err}`);
@@ -74,49 +100,48 @@ class Crafter {
     }
 
     const f = () => {
-      let input;
-      let found = false;
-      const inputID = ele.getAttribute("craft-input");
-      if (inputID) {
-        const inputEl = document.getElementById(inputID);
-        if (inputEl) {
-          input = inputEl.innerText;
-          found = true;
+      let callbackFn;
+      const addr = ele.getAttribute("craft-target");
+      try {
+        let { el, prop } = parseCraftAddress(addr);
+        let targetEl;
+        switch (el) {
+          case "":
+          case "this":
+            targetEl = ele;
+            break;
+          default:
+            targetEl = document.querySelector(el);
+            break;
         }
+
+        switch (prop) {
+          case undefined:
+            callbackFn = (res) => (targetEl.innerText = res);
+            break;
+          default:
+            if (prop.startsWith("[") && prop.endsWith("]")) {
+              console.log(prop);
+              prop = prop.slice(1, prop.length - 1);
+
+              callbackFn = (res) => {
+                targetEl.setAttribute(prop, res);
+              };
+            }
+            break;
+        }
+      } catch (err) {
+        console.error("failed to parse craft address", err);
+        return;
       }
 
-      let result;
-      switch (found) {
-        case true:
-          result = handler(input);
-          break;
-        case false:
-          result = handler();
-          break;
-      }
+      const input = ele.getAttribute("craft-input");
+      const parsed = parseCraftInput(input);
 
-      const target = ele.getAttribute("craft-target");
-      const { selector, attribute } = parseTarget(target);
-      let targetEl;
-      switch (selector) {
-        case "":
-        case "this":
-          targetEl = ele;
-          break;
-        default:
-          targetEl = document.getElementById(selector);
-          break;
-      }
-
-      switch (attribute) {
-        case "":
-          targetEl.innerText = result;
-          break;
-        default:
-          targetEl.setAttribute(attribute, result);
-          break;
-      }
+      handler(...parsed, callbackFn);
+      // console.log("response", result);
     };
+
     const trigger = ele.getAttribute("craft-trigger");
     switch (trigger) {
       case "":
@@ -204,6 +229,7 @@ class Worker {
     const flashcard = document.getElementById("flashcard");
     const playIPASoundEl = document.getElementById("play-ipa");
     ipaEl.textContent = this.currentCard.ipa;
+    ipaEl.removeAttribute("data");
     wordEl.textContent = this.currentCard.word;
     definitionEl.textContent = this.currentCard.definition;
     exampleEl.textContent = `"${this.currentCard.example}"`;
@@ -230,7 +256,6 @@ class Worker {
     }
     if (response.payload) {
       this.currentCard = JSON.parse(response.payload);
-      console.log(this.currentCard);
     }
   }
 

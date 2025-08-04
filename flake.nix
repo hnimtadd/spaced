@@ -21,6 +21,7 @@
             go_1_24
             gopls
             gotools
+            tinygo
 
             # AI/ML tools
             nodejs-slim

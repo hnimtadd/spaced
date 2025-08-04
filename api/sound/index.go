@@ -22,21 +22,12 @@ func jsonResponse(w io.Writer, data any) error {
 	return nil
 }
 
-type requestBody struct {
-	IPA string `json:"ipa"`
-}
+const IPAHeader = "Craft-IPA"
 
 func Handler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		jsonResponse(w, map[string]any{"error": "only POST allowed"})
-		return
-	}
-
-	reqBody := new(requestBody)
-	if err := json.NewDecoder(r.Body).Decode(reqBody); err != nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		jsonResponse(w, map[string]any{"error": "could not parse request body " + err.Error()})
 		return
 	}
 
@@ -47,8 +38,18 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ipaEncoded := r.Header.Get(IPAHeader)
+	ipa, err := base64.StdEncoding.DecodeString(ipaEncoded)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		jsonResponse(w, map[string]any{"error": err.Error()})
+		return
+	}
+
+	text := fmt.Sprintf(`<phoneme alphabet="ipa" ph="%s"></phoneme>`, string(ipa))
+	fmt.Println("handling ipa", string(ipa), "text", text)
 	body := map[string]any{
-		"text":     fmt.Sprintf(`<phoneme alphabet="ipa" ph="%s"></phoneme>`, reqBody.IPA),
+		"text":     text,
 		"model_id": "eleven_monolingual_v1",
 		"voice_settings": map[string]any{
 			"speed": 0.75,
@@ -69,6 +70,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, _ := http.DefaultClient.Do(req)
+	fmt.Println(resp)
 	defer func() { _ = resp.Body.Close() }()
 	respBytes, _ := io.ReadAll(resp.Body)
 	soundPayload := base64.RawStdEncoding.EncodeToString(respBytes)
