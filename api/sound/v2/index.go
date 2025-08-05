@@ -1,28 +1,15 @@
 package handler
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"slices"
-	"strings"
 	"time"
 
+	coreHtml "github.com/hnimtadd/spaced/src/html"
+	"github.com/hnimtadd/spaced/src/utils"
 	"golang.org/x/net/html"
 )
-
-func jsonResponse(w io.Writer, data any) error {
-	dataBytes, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(dataBytes)
-	if err != nil {
-		return err
-	}
-	return nil
-}
 
 const url = "https://dictionary.cambridge.org/us/dictionary/english/%s"
 
@@ -30,44 +17,25 @@ var defaultHeaders = http.Header{
 	http.CanonicalHeaderKey("User-Agent"): []string{"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
 }
 
-func GetAttr(attrs []html.Attribute, key string) string {
-	for _, attr := range attrs {
-		if attr.Key == key {
-			return attr.Val
-		}
-	}
-	return ""
-}
-
-func HasAttr(attrs []html.Attribute, key string, values ...string) bool {
-	for _, attr := range attrs {
-		if attr.Key != key {
-			continue
-		}
-
-		attrValues := strings.Split(attr.Val, " ")
-		for _, val := range values {
-			if !slices.Contains(attrValues, val) {
-				return false
-			}
-		}
-		return true
-	}
-	return false
-}
-
 func Handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		jsonResponse(w, map[string]any{"error": "only GET allowed"})
+		utils.SMarshal(w, map[string]any{"error": "only GET allowed"})
 		return
 	}
+
 	word := r.Header.Get("Craft-word")
 	region := r.Header.Get("Craft-region")
 	if region == "" {
 		region = "us"
 	}
-	ipa := r.Header.Get("Craft-word")
+
+	ipa := r.Header.Get("Craft-ipa")
+	if word == "" || ipa == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.SMarshal(w, map[string]any{"error": "bad craft headers"})
+		return
+	}
 
 	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf(url, word), http.NoBody)
 
@@ -87,92 +55,61 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	doc, err := html.Parse(dictionaryResponse.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		jsonResponse(w, map[string]any{"error": err.Error()})
+		utils.SMarshal(w, map[string]any{"error": err.Error()})
 		return
 	}
 
-	processWordNode := func(node *html.Node) (string, error) {
-	sibLoop:
-		for sib := range node.ChildNodes() {
-			if sib.Type != html.ElementNode ||
-				sib.Data != "span" ||
-				!HasAttr(sib.Attr, "class", region, "dpron-i") {
-				continue
-			}
+	soundURLs := []string{}
 
-			var foundIPANode bool
-			var soundURL string
-
-			for child := range sib.ChildNodes() {
-				if child.Type == html.ElementNode &&
-					child.Data == "span" &&
-					HasAttr(child.Attr, "class", region, "prop", "dpron") {
-					for grandChild := range child.ChildNodes() {
-						if grandChild.Type == html.ElementNode &&
-							grandChild.Data == "span" &&
-							HasAttr(grandChild.Attr, "class", "ipa", "dipa") {
-							if grandChild.FirstChild.Data != ipa {
-								continue sibLoop
-							}
-							foundIPANode = true
-						}
-					}
-				}
-
-				if sib.Type == html.ElementNode &&
-					sib.Data == "span" &&
-					HasAttr(sib.Attr, "class", region, "daud") {
-					for grandChild := range child.ChildNodes() {
-						if grandChild.Type == html.ElementNode &&
-							grandChild.Data == "audio" {
-
-							for grandGrandChild := range grandChild.ChildNodes() {
-								if grandGrandChild.Type == html.ElementNode &&
-									grandGrandChild.Data == "source" &&
-									HasAttr(grandGrandChild.Attr, "type", "audio/mpeg") {
-									soundURL = GetAttr(grandGrandChild.Attr, "src")
-
-									if foundIPANode {
-										goto returnSound
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-
-		returnSound:
-			if foundIPANode {
-				return soundURL, nil
-			}
+	var processWordNode coreHtml.WalkFunc = func(node *html.Node) error {
+		if node.Type != html.ElementNode ||
+			node.Data != "source" ||
+			!coreHtml.HasAttr(node.Attr, "type", "audio/mpeg") {
+			return nil
 		}
-		return "", fmt.Errorf("not found")
-	}
 
-	processDocNode := func(node *html.Node) (string, error) {
-		if node.Type == html.ElementNode && node.Data == "div" {
-			for _, attr := range node.Attr {
-				if attr.Key == "class" &&
-					strings.Contains(attr.Val, "pos-header") &&
-					strings.Contains(attr.Val, "dpos-h") {
-					soundURL, err := processWordNode(node)
-					if err != nil {
-						return soundURL, nil
+		greatGrandParent := node.Parent.Parent.Parent
+
+		for child := range greatGrandParent.ChildNodes() {
+			if child.Type == html.ElementNode &&
+				child.Data == "span" &&
+				coreHtml.HasAttr(child.Attr, "class", "pron", "dpron") {
+				for grandChild := range child.ChildNodes() {
+					if grandChild.Type == html.ElementNode &&
+						grandChild.Data == "span" &&
+						coreHtml.HasAttr(grandChild.Attr, "class", "ipa", "dipa") {
+						fmt.Println("IPA", grandChild.FirstChild.Data)
+						if grandChild.FirstChild.Data == ipa {
+							soundURLs = append(soundURLs, coreHtml.GetAttr(node.Attr, "src"))
+						}
+
+						return coreHtml.ErrWalkSkip
 					}
 				}
 			}
 		}
-		return "", fmt.Errorf("not found")
+		return coreHtml.ErrWalkSkip
 	}
 
-	soundURL, err := processDocNode(doc)
+	coreHtml.Walk(doc, func(node *html.Node) error {
+		if node.Type == html.ElementNode && node.Data == "div" && coreHtml.HasAttr(node.Attr, "class", "pos-header", "dpos-h") {
+			coreHtml.Walk(node, processWordNode)
+			return coreHtml.ErrWalkSkip
+		}
+		return nil
+	})
+
+	fmt.Println(soundURLs)
 	if err != nil {
-		fmt.Println(3)
 		w.WriteHeader(http.StatusServiceUnavailable)
-		jsonResponse(w, map[string]any{"error": err.Error()})
+		utils.SMarshal(w, map[string]any{"error": err.Error()})
 		return
 	}
-	fmt.Println(soundURL)
-	jsonResponse(w, map[string]any{"url": soundURL})
+	// url := "https://dictionary.cambridge.org/%s"
+	// req, _ = http.NewRequest(http.MethodGet, fmt.Sprintf(url, soundURL), http.NoBody)
+	//
+	// req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	//
+	// resp, _ := http.DefaultClient.Do(req)
+	// io.Copy(w, resp.Body)
 }
