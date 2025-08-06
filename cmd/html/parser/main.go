@@ -5,37 +5,10 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"slices"
-	"strings"
 
+	coreHtml "github.com/hnimtadd/spaced/src/html"
 	"golang.org/x/net/html"
 )
-
-func GetAttr(attrs []html.Attribute, key string) string {
-	for _, attr := range attrs {
-		if attr.Key == key {
-			return attr.Val
-		}
-	}
-	return ""
-}
-
-func HasAttr(attrs []html.Attribute, key string, values ...string) bool {
-	for _, attr := range attrs {
-		if attr.Key != key {
-			continue
-		}
-
-		attrValues := strings.Split(attr.Val, " ")
-		for _, val := range values {
-			if !slices.Contains(attrValues, val) {
-				return false
-			}
-		}
-		return true
-	}
-	return false
-}
 
 func main() {
 	file, _ := os.Open("./sample.html")
@@ -43,96 +16,58 @@ func main() {
 	region := "us"
 	ipa := "əˈɡriː"
 
-	processWordNode := func(node *html.Node) (string, error) {
-	sibLoop:
-		for sib := range node.ChildNodes() {
-			if sib.Type != html.ElementNode ||
-				sib.Data != "span" ||
-				!HasAttr(sib.Attr, "class", region, "dpron-i") {
-				continue
-			}
+	soundURLs := []string{}
+	var processWordNode coreHtml.WalkFunc = func(node *html.Node) error {
+		if node.Type != html.ElementNode ||
+			node.Data != "source" ||
+			!coreHtml.HasAttr(node.Attr, "type", "audio/mpeg") {
+			return nil
+		}
 
-			var foundIPANode bool
-			var soundURL string
+		greatGrandParent := node.Parent.Parent.Parent
 
-			for child := range sib.ChildNodes() {
-				if child.Type == html.ElementNode &&
-					child.Data == "span" &&
-					HasAttr(child.Attr, "class", "pron", "dpron") {
-					for grandChild := range child.ChildNodes() {
-						if grandChild.Type == html.ElementNode &&
-							grandChild.Data == "span" &&
-							HasAttr(grandChild.Attr, "class", "ipa", "dipa") {
-							fmt.Println("IPA", grandChild.FirstChild.Data)
-							if grandChild.FirstChild.Data != ipa {
-								fmt.Println("found different IPA, skip this node")
-								continue sibLoop
-							}
-							foundIPANode = true
+		if greatGrandParent.Type != html.ElementNode ||
+			greatGrandParent.Data != "span" ||
+			!coreHtml.HasAttr(greatGrandParent.Attr, "class", region, "dpron-i") {
+			return nil
+		}
+
+		for child := range greatGrandParent.ChildNodes() {
+			if child.Type == html.ElementNode &&
+				child.Data == "span" &&
+				coreHtml.HasAttr(child.Attr, "class", "pron", "dpron") {
+				for grandChild := range child.ChildNodes() {
+					if grandChild.Type == html.ElementNode &&
+						grandChild.Data == "span" &&
+						coreHtml.HasAttr(grandChild.Attr, "class", "ipa", "dipa") {
+						if grandChild.FirstChild.Data == ipa {
+							soundURLs = append(soundURLs, coreHtml.GetAttr(node.Attr, "src"))
 						}
+
+						return coreHtml.ErrWalkSkip
 					}
 				}
-
-				if child.Type == html.ElementNode &&
-					child.Data == "span" &&
-					HasAttr(child.Attr, "class", "daud") {
-					for grandChild := range child.ChildNodes() {
-						if grandChild.Type == html.ElementNode &&
-							grandChild.Data == "audio" {
-
-							for grandGrandChild := range grandChild.ChildNodes() {
-								if grandGrandChild.Type == html.ElementNode &&
-									grandGrandChild.Data == "source" &&
-									HasAttr(grandGrandChild.Attr, "type", "audio/mpeg") {
-									soundURL = GetAttr(grandGrandChild.Attr, "src")
-									fmt.Println("found SourceURL", soundURL, foundIPANode)
-								}
-							}
-						}
-					}
-				}
-				if foundIPANode && soundURL != "" {
-					fmt.Println("found both ipa and sound, early return")
-					break
-				}
-			}
-			fmt.Println("return", foundIPANode, soundURL)
-			if foundIPANode {
-				return soundURL, nil
 			}
 		}
-		return "", fmt.Errorf("not found")
+		return coreHtml.ErrWalkSkip
 	}
 
-	var processDocNode func(node *html.Node) (string, error)
-	processDocNode = func(node *html.Node) (string, error) {
-		if node.Type == html.ElementNode && node.Data == "div" {
-			for _, attr := range node.Attr {
-				if attr.Key == "class" &&
-					strings.Contains(attr.Val, "pos-header") &&
-					strings.Contains(attr.Val, "dpos-h") {
-					soundURL, err := processWordNode(node)
-					fmt.Println("receive", soundURL, err)
-					if err == nil {
-						return soundURL, nil
-					}
-				}
-			}
+	err := coreHtml.Walk(doc, func(node *html.Node) error {
+		if node.Type == html.ElementNode && node.Data == "div" && coreHtml.HasAttr(node.Attr, "class", "pos-header", "dpos-h") {
+			coreHtml.Walk(node, processWordNode)
+			return coreHtml.ErrWalkSkip
 		}
-		for child := range node.ChildNodes() {
-			if soundURL, err := processDocNode(child); err == nil {
-				return soundURL, nil
-			}
-		}
-		return "", fmt.Errorf("not found")
-	}
+		return nil
+	})
+	fmt.Println(err)
 
-	soundURL, err := processDocNode(doc)
-	if err != nil {
-		panic(err)
+	fmt.Println(soundURLs)
+
+	if len(soundURLs) == 0 {
+		panic("empty sound url")
 	}
 	url := "https://dictionary.cambridge.org/%s"
-	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf(url, soundURL), http.NoBody)
+	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf(url, soundURLs[0]), http.NoBody)
 
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 

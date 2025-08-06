@@ -274,25 +274,27 @@ func (m *SpacedManager) JSStats(js.Value, []js.Value) any {
 }
 
 func JSPlay(_ js.Value, args []js.Value) any {
-	if len(args) != 3 {
+	if len(args) != 4 {
 		return model.PayloadResponse(map[string]any{"error": "number of args pass to this method should = 3!"})
 	}
 	var sound64 string
 	// if the request include non-empty base64 encoded sound payload, then
 	// try our-best to play it first.
-	if args[1].Truthy() && args[1].Type() == js.TypeString {
-		sound64 = args[1].String()
+	if args[2].Truthy() && args[2].Type() == js.TypeString {
+		sound64 = args[2].String()
 	}
 
-	callbackFunc := args[2]
+	callbackFunc := args[3]
 	// if we reach this part, it's mean the sound encoded payload is not
 	// ready, feetch ones from proxy server and return to the js land.
 	if sound64 == "" {
-		ipa := args[0].String()
+		word := args[0].String()
+		ipa := args[1].String()
 		encodedIPA := base64.StdEncoding.EncodeToString([]byte(ipa))
 
 		headers := http.Header{}
-		headers.Set(handler.IPAHeader, encodedIPA)
+		headers.Set(handler.CraftIPAHeader, encodedIPA)
+		headers.Set(handler.CraftWordHeader, word)
 		req := utils.Request{
 			URL:    "/api/sound/index",
 			Method: http.MethodGet,

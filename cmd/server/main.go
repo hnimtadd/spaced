@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 
 	handler "github.com/hnimtadd/spaced/api/sound"
-	handlerv2 "github.com/hnimtadd/spaced/api/sound/v2"
 )
 
 type httpFs struct {
@@ -45,7 +44,6 @@ func main() {
 	svc := http.NewServeMux()
 	fs := http.FileServerFS(httpFs{})
 
-	svc.HandleFunc("/api/sound/index/v2", loggingMiddlewareFunc(disableCacheMiddlewareFunc(http.HandlerFunc(handlerv2.Handler))))
 	svc.HandleFunc("/api/sound/index", loggingMiddlewareFunc(disableCacheMiddlewareFunc(http.HandlerFunc(handler.Handler))))
 	svc.Handle("/", loggingMiddleware(disableCacheMiddelware(fs)))
 
