@@ -155,7 +155,7 @@ class Crafter {
       const isAsync = ele.getAttribute("craft-async") !== null;
       console.log(callbackFn);
       if (isAsync) {
-        handler(...parsed, callbackFn);
+        handler(...parsed).then(callbackFn);
       } else {
         callbackFn(handler());
       }

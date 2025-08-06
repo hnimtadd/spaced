@@ -275,7 +275,7 @@ func (m *SpacedManager) JSStats(this js.Value, args []js.Value) any {
 }
 
 func JSPlay(_ js.Value, args []js.Value) any {
-	if len(args) != 4 {
+	if len(args) != 3 {
 		return model.PayloadResponse(map[string]any{"error": "number of args pass to this method should = 3!"})
 	}
 	var sound64 string
@@ -285,7 +285,6 @@ func JSPlay(_ js.Value, args []js.Value) any {
 		sound64 = args[2].String()
 	}
 
-	callbackFunc := args[3]
 	// if we reach this part, it's mean the sound encoded payload is not
 	// ready, feetch ones from proxy server and return to the js land.
 	if sound64 == "" {
@@ -304,9 +303,6 @@ func JSPlay(_ js.Value, args []js.Value) any {
 		resolveFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
 			jsonPromiseFunc := js.FuncOf(func(this js.Value, args []js.Value) (result any) {
 				jsonString := js.Global().Get("JSON").Call("stringify", args[0]).String()
-				defer func() {
-					callbackFunc.Invoke(result)
-				}()
 
 				respPayload := make(map[string]string)
 				err := json.Unmarshal([]byte(jsonString), &respPayload)

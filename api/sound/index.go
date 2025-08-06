@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -79,9 +78,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		utils.SMarshal(w, map[string]any{"error": err.Error()})
 		return
 	}
-
-	f, _ := os.OpenFile("./sample.html", os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0o777)
-	html.Render(f, doc)
 
 	soundURLs := []string{}
 	candidateSoundURL := []string{} // candidate means we don't have exact ipa,
