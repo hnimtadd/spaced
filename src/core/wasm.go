@@ -249,10 +249,11 @@ func (m *SpacedManager) JSStart(js.Value, []js.Value) any {
 	return model.PayloadResponse("ready")
 }
 
-func (m *SpacedManager) JSStats(js.Value, []js.Value) any {
+func (m *SpacedManager) JSStats(this js.Value, args []js.Value) any {
 	tpl := `<div class="max-w-5xl sm:w-[30rem] md:w-[40rem] lg:w-[50rem] mx-auto h-screen p-4 space-y-4">{{range .Sessions}}{{.}}{{end}}</div>`
 	tmpl, err := template.New("stats").Parse(tpl)
 	if err != nil {
+		fmt.Println("failed to init tmpl: " + err.Error())
 		return model.ErrorResponse("failed to init tmpl: " + err.Error())
 	}
 	eles := make([]template.HTML, len(m.records))

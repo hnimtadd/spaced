@@ -5,7 +5,6 @@ function parseCraftAddress(addr) {
   addr = addr.trim();
 
   const parts = addr.split(":");
-  console.log(parts.length);
   if (parts.lenth > 2 || parts.lenth <= 0) {
     throw Error("unsupported address");
   }
@@ -19,13 +18,12 @@ function parseCraftAddress(addr) {
   }
   return {
     el: el,
-    prop: "innerText",
   };
 }
 
 function parseCraftInput(input) {
   // craft-input="#ipa:innerText,#ipa:[data]"
-  if (!input) return null;
+  if (!input) return [];
   input = input.trim();
   const parts = input.split(",");
   return parts.map((item) => {
@@ -33,6 +31,10 @@ function parseCraftInput(input) {
     const parsed = parseCraftAddress(item);
     const el = document.querySelector(parsed.el);
     if (!el) return "";
+
+    if (parsed.prop === undefined) {
+      return el.innerText;
+    }
 
     if (parsed.prop in el) {
       return el[parsed.prop];
@@ -98,12 +100,14 @@ class Crafter {
       console.log("WASM method not found");
       return;
     }
+    console.log("handler is ready");
 
     const f = () => {
       let callbackFn;
       const addr = ele.getAttribute("craft-target");
       try {
         let { el, prop } = parseCraftAddress(addr);
+        console.log("parsed", { el, prop });
         let targetEl;
         switch (el) {
           case "":
@@ -114,10 +118,16 @@ class Crafter {
             targetEl = document.querySelector(el);
             break;
         }
+        console.log("here");
 
         switch (prop) {
-          case undefined:
+          case "innerText":
             callbackFn = (res) => (targetEl.innerText = res);
+            break;
+          case undefined:
+          case null:
+          case "innerHTML":
+            callbackFn = (res) => (targetEl.innerHTML = res);
             break;
           default:
             if (prop.startsWith("[") && prop.endsWith("]")) {
@@ -126,6 +136,10 @@ class Crafter {
 
               callbackFn = (res) => {
                 targetEl.setAttribute(prop, res);
+              };
+            } else {
+              callbackFn = (res) => {
+                console.log("default callback", res);
               };
             }
             break;
@@ -138,13 +152,19 @@ class Crafter {
       const input = ele.getAttribute("craft-input");
       const parsed = parseCraftInput(input);
 
-      handler(...parsed, callbackFn);
+      const isAsync = ele.getAttribute("craft-async") !== null;
+      console.log(callbackFn);
+      if (isAsync) {
+        handler(...parsed, callbackFn);
+      } else {
+        callbackFn(handler());
+      }
       // console.log("response", result);
     };
 
     const trigger = ele.getAttribute("craft-trigger");
     switch (trigger) {
-      case "":
+      case null:
         f();
         return;
       case "click":
