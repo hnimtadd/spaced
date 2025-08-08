@@ -297,6 +297,19 @@ func (m *SpacedManager) JSStats(this js.Value, args []js.Value) any {
 	return js.ValueOf(buf.String())
 }
 
+func (m *SpacedManager) sessionFromRecord(record session.Record) *session.Session {
+	cards := internalfsrs.Cards{}
+	for i, cardID := range record.Cards {
+		cards[i] = m.cards[cardID]
+	}
+	rand.Shuffle(len(cards), func(i, j int) {
+		cards[i], cards[j] = cards[j], cards[i]
+	})
+	session := session.NewSession(cards)
+	m.currSession = session
+	return m.currSession
+}
+
 func JSPlay(_ js.Value, args []js.Value) any {
 	if len(args) != 3 {
 		return model.PayloadResponse(map[string]any{"error": "number of args pass to this method should = 3!"})
@@ -470,6 +483,7 @@ func main() {
 		"submit": js.FuncOf(m.JSSubmit),
 		"play":   js.FuncOf(JSPlay),
 		"stats":  js.FuncOf(m.JSStats),
+		"replay": js.FuncOf(m.JSStats),
 	}
 
 	wasmBridge := js.Global().Get("Object").New()

@@ -242,6 +242,8 @@ class Worker {
     globalThis.location.assign("/stats");
   }
   handleUpdateCard() {
+    flashcard.classList.remove("rotate-y-180");
+
     const wordEl = document.getElementById("word");
     const ipaEl = document.getElementById("ipa");
     const definitionEl = document.getElementById("definition");
@@ -256,7 +258,6 @@ class Worker {
     wordEl.textContent = this.currentCard.word;
     definitionEl.textContent = this.currentCard.definition;
     exampleEl.textContent = `"${this.currentCard.example}"`;
-    flashcard.classList.remove("rotate-y-180");
     wordEl.addEventListener("click", function (event) {
       // Check if text is selected within the child element
       const selection = globalThis.getSelection();
