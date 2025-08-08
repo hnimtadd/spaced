@@ -249,11 +249,25 @@ class Worker {
     const flashcard = document.getElementById("flashcard");
     const playIPASoundEl = document.getElementById("play-ipa");
     ipaEl.textContent = this.currentCard.ipa;
+
+    // hack
     ipaEl.removeAttribute("data");
+
     wordEl.textContent = this.currentCard.word;
     definitionEl.textContent = this.currentCard.definition;
     exampleEl.textContent = `"${this.currentCard.example}"`;
     flashcard.classList.remove("rotate-y-180");
+    wordEl.addEventListener("click", function (event) {
+      // Check if text is selected within the child element
+      const selection = globalThis.getSelection();
+      const isTextSelected =
+        selection.toString().length > 0 &&
+        wordEl.contains(selection.anchorNode);
+
+      if (isTextSelected) {
+        event.stopPropagation(); // Prevent the event from bubbling up to the parent
+      }
+    });
 
     playIPASoundEl.addEventListener("click", (ev) => {
       // stop this ev propagating to parent object.

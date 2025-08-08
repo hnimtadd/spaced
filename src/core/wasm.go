@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"math/rand/v2"
 	"net/http"
 	"slices"
 	"sort"
@@ -67,7 +68,7 @@ func NewSpacedManger() (*SpacedManager, error) {
 func (m *SpacedManager) JSInit(js.Value, []js.Value) any {
 	if err := m.handlePullState(); err != nil {
 		req := utils.Request{
-			URL:       "/assets/cards_sample.json",
+			URL:       "/assets/cards.json",
 			Method:    http.MethodGet,
 			Header:    nil,
 			BodyBytes: nil,
@@ -112,13 +113,35 @@ func (m *SpacedManager) JSInit(js.Value, []js.Value) any {
 // startSession based on the list of most urgent due date cards
 // prepare the list of cards to be review in this session.
 func (m *SpacedManager) startSession() any {
-	sort.Sort(internalfsrs.Cards(m.cards))
+	revieweds := internalfsrs.Cards{}
+	news := internalfsrs.Cards{}
+	for _, card := range m.cards {
+		if card.Due.IsZero() {
+			news = append(news, card)
+		} else {
+			revieweds = append(revieweds, card)
+		}
+	}
+	sort.Sort(revieweds)
+	sort.Sort(news)
 	numCards := min(m.targetNum, len(m.cards))
 	cards := make(internalfsrs.Cards, numCards)
 
-	for i := range numCards {
-		cards[i] = m.cards[i]
+	numReviewed := int(0.2 * float64(numCards))
+	numNews := numCards - numReviewed
+
+	i := 0
+	for idx := 0; idx < numReviewed; idx, i = idx+1, i+1 {
+		cards[i] = revieweds[idx]
 	}
+
+	for idx := 0; idx < numNews; idx, i = idx+1, i+1 {
+		cards[i] = news[idx]
+	}
+
+	rand.Shuffle(numCards, func(i, j int) {
+		cards[i], cards[j] = cards[j], cards[i]
+	})
 
 	m.currSession = session.NewSession(cards)
 	return model.PayloadResponse("success")
