@@ -242,14 +242,14 @@ class Worker {
     globalThis.location.assign("/stats");
   }
   handleUpdateCard() {
-    flashcard.classList.remove("rotate-y-180");
-
     const wordEl = document.getElementById("word");
     const ipaEl = document.getElementById("ipa");
     const definitionEl = document.getElementById("definition");
     const exampleEl = document.getElementById("example");
     const flashcard = document.getElementById("flashcard");
     const playIPASoundEl = document.getElementById("play-ipa");
+
+    flashcard.classList.remove("rotate-y-180");
     ipaEl.textContent = this.currentCard.ipa;
 
     // hack
