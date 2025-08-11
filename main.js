@@ -236,11 +236,6 @@ class Worker {
       console.error("Error fetching or parsing JSON:", err);
     }
   }
-  stop() {
-    const app = document.getElementById("app");
-    app.classList.add("hidden");
-    globalThis.location.assign("/stats");
-  }
   handleUpdateCard() {
     const wordEl = document.getElementById("word");
     const ipaEl = document.getElementById("ipa");
@@ -285,7 +280,6 @@ class Worker {
       return;
     }
     if (response.stop) {
-      this.stop();
       console.log("stop");
       return;
     }

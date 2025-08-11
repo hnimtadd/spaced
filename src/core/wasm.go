@@ -16,6 +16,7 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/google/uuid"
 	handler "github.com/hnimtadd/spaced/api/sound"
 	internalfsrs "github.com/hnimtadd/spaced/src/core/fsrs"
 	"github.com/hnimtadd/spaced/src/core/model"
@@ -46,7 +47,8 @@ type SpacedManager struct {
 	targetNum   int
 	currSession *session.Session
 
-	records []session.Record
+	records       []*session.Record
+	recordsLookup map[string]*session.Record
 }
 
 func NewSpacedManger() (*SpacedManager, error) {
@@ -56,11 +58,12 @@ func NewSpacedManger() (*SpacedManager, error) {
 	}
 	fsrss := fsrs.NewFSRS(fsrs.DefaultParam())
 	m := &SpacedManager{
-		localStorage: localStorage,
-		fsrs:         fsrss,
-		targetNum:    10,
-		records:      []session.Record{},
-		lookup:       map[int]*model.Card{},
+		localStorage:  localStorage,
+		fsrs:          fsrss,
+		targetNum:     10,
+		records:       []*session.Record{},
+		recordsLookup: map[string]*session.Record{},
+		lookup:        map[int]*model.Card{},
 	}
 	return m, nil
 }
@@ -147,10 +150,31 @@ func (m *SpacedManager) startSession() any {
 	return model.PayloadResponse("success")
 }
 
+func (m *SpacedManager) addRecord(record session.Record) error {
+	retry := 100
+	var id string
+	for range retry {
+		id = uuid.NewString()
+		if _, exists := m.recordsLookup[id]; !exists {
+			break
+		}
+	}
+
+	if id == "" {
+		return fmt.Errorf("failed to get unique ID after retries")
+	}
+
+	ptr := &record
+	ptr.ID = id
+	m.recordsLookup[id] = ptr
+	m.records = append(m.records, ptr)
+	return nil
+}
+
 func (m *SpacedManager) completeSession() {
 	record := session.NewRecordFromSession(m.currSession)
+	m.addRecord(record)
 	m.currSession = nil
-	m.records = append(m.records, record)
 	m.push("records", m.records)
 	m.push("flashcards", m.cards)
 }
@@ -188,6 +212,10 @@ func (m *SpacedManager) handlePullState() error {
 	}
 	if err := m.pull("records", &m.records); err != nil {
 		return fmt.Errorf("failed to pull sessions, err: %v", err)
+	} else {
+		for _, record := range m.records {
+			m.recordsLookup[record.ID] = record
+		}
 	}
 	return nil
 }
@@ -213,6 +241,7 @@ func (m *SpacedManager) next() any {
 
 	if m.currSession.ShouldStop() {
 		m.completeSession()
+		js.Global().Get("location").Call("assign", "/stats")
 		return model.StopResponse()
 	}
 
@@ -297,7 +326,7 @@ func (m *SpacedManager) JSStats(this js.Value, args []js.Value) any {
 	return js.ValueOf(buf.String())
 }
 
-func (m *SpacedManager) sessionFromRecord(record session.Record) *session.Session {
+func (m *SpacedManager) sessionFromRecord(record *session.Record) *session.Session {
 	cards := internalfsrs.Cards{}
 	for i, cardID := range record.Cards {
 		cards[i] = m.cards[cardID]
@@ -305,9 +334,23 @@ func (m *SpacedManager) sessionFromRecord(record session.Record) *session.Sessio
 	rand.Shuffle(len(cards), func(i, j int) {
 		cards[i], cards[j] = cards[j], cards[i]
 	})
-	session := session.NewSession(cards)
+	return session.NewSession(cards)
+}
+
+func (m *SpacedManager) JSReplaySession(_ js.Value, args []js.Value) any {
+	if len(args) != 1 {
+		return model.ErrorResponse("number of args passed to this method should = 1")
+	}
+
+	recordID := args[0].String()
+	record, exist := m.recordsLookup[recordID]
+	if !exist {
+		return model.ErrorResponse("record not exists")
+	}
+	session := m.sessionFromRecord(record)
 	m.currSession = session
-	return m.currSession
+	js.Global().Get("location").Call("assign", "/session")
+	return nil
 }
 
 func JSPlay(_ js.Value, args []js.Value) any {
@@ -483,7 +526,7 @@ func main() {
 		"submit": js.FuncOf(m.JSSubmit),
 		"play":   js.FuncOf(JSPlay),
 		"stats":  js.FuncOf(m.JSStats),
-		"replay": js.FuncOf(m.JSStats),
+		"replay": js.FuncOf(m.JSReplaySession),
 	}
 
 	wasmBridge := js.Global().Get("Object").New()

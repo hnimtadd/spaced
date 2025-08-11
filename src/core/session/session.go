@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hnimtadd/spaced/src/core/fsrs"
 )
 
@@ -50,6 +51,7 @@ func (s Session) ShouldStop() bool {
 }
 
 type Record struct {
+	ID          string    `json:"id"`
 	Cards       []int     `json:"cardIDs"`
 	StartedAt   time.Time `json:"staredAt"`
 	CompletedAt time.Time `json:"completedAt"`
@@ -60,7 +62,9 @@ func NewRecordFromSession(session *Session) Record {
 	for i, card := range session.Cards {
 		ids[i] = card.ID
 	}
+
 	return Record{
+		ID:          uuid.NewString(),
 		Cards:       ids,
 		StartedAt:   session.StartedAt,
 		CompletedAt: time.Now(),
