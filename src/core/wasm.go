@@ -12,11 +12,11 @@ import (
 	"net/http"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall/js"
 	"time"
 
-	"github.com/google/uuid"
 	handler "github.com/hnimtadd/spaced/api/sound"
 	internalfsrs "github.com/hnimtadd/spaced/src/core/fsrs"
 	"github.com/hnimtadd/spaced/src/core/model"
@@ -47,8 +47,7 @@ type SpacedManager struct {
 	targetNum   int
 	currSession *session.Session
 
-	records       []*session.Record
-	recordsLookup map[string]*session.Record
+	records []*session.Record
 }
 
 func NewSpacedManger() (*SpacedManager, error) {
@@ -58,12 +57,11 @@ func NewSpacedManger() (*SpacedManager, error) {
 	}
 	fsrss := fsrs.NewFSRS(fsrs.DefaultParam())
 	m := &SpacedManager{
-		localStorage:  localStorage,
-		fsrs:          fsrss,
-		targetNum:     10,
-		records:       []*session.Record{},
-		recordsLookup: map[string]*session.Record{},
-		lookup:        map[int]*model.Card{},
+		localStorage: localStorage,
+		fsrs:         fsrss,
+		targetNum:    10,
+		records:      []*session.Record{},
+		lookup:       map[int]*model.Card{},
 	}
 	return m, nil
 }
@@ -151,22 +149,10 @@ func (m *SpacedManager) startSession() any {
 }
 
 func (m *SpacedManager) addRecord(record session.Record) error {
-	retry := 100
-	var id string
-	for range retry {
-		id = uuid.NewString()
-		if _, exists := m.recordsLookup[id]; !exists {
-			break
-		}
-	}
-
-	if id == "" {
-		return fmt.Errorf("failed to get unique ID after retries")
-	}
+	id := len(m.records)
 
 	ptr := &record
 	ptr.ID = id
-	m.recordsLookup[id] = ptr
 	m.records = append(m.records, ptr)
 	return nil
 }
@@ -212,10 +198,6 @@ func (m *SpacedManager) handlePullState() error {
 	}
 	if err := m.pull("records", &m.records); err != nil {
 		return fmt.Errorf("failed to pull sessions, err: %v", err)
-	} else {
-		for _, record := range m.records {
-			m.recordsLookup[record.ID] = record
-		}
 	}
 	return nil
 }
@@ -327,7 +309,7 @@ func (m *SpacedManager) JSStats(this js.Value, args []js.Value) any {
 }
 
 func (m *SpacedManager) sessionFromRecord(record *session.Record) *session.Session {
-	cards := internalfsrs.Cards{}
+	cards := make(internalfsrs.Cards, len(record.Cards))
 	for i, cardID := range record.Cards {
 		cards[i] = m.cards[cardID]
 	}
@@ -339,15 +321,23 @@ func (m *SpacedManager) sessionFromRecord(record *session.Record) *session.Sessi
 
 func (m *SpacedManager) JSReplaySession(_ js.Value, args []js.Value) any {
 	if len(args) != 1 {
+		fmt.Println("number of args is not valid")
 		return model.ErrorResponse("number of args passed to this method should = 1")
 	}
 
-	recordID := args[0].String()
-	record, exist := m.recordsLookup[recordID]
-	if !exist {
-		return model.ErrorResponse("record not exists")
+	recordIDString := args[0].String()
+	recordID, err := strconv.Atoi(recordIDString)
+	if err != nil {
+		fmt.Println("could not convert to int from", recordIDString)
+		return model.ErrorResponse(err.Error())
 	}
+	if recordID < 0 || recordID >= len(m.records) {
+		fmt.Println("invalid record")
+		return model.ErrorResponse("invalid recordID")
+	}
+	record := m.records[recordID]
 	session := m.sessionFromRecord(record)
+	fmt.Println(session)
 	m.currSession = session
 	js.Global().Get("location").Call("assign", "/session")
 	return nil

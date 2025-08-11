@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/hnimtadd/spaced/src/core/fsrs"
 )
 
@@ -51,7 +50,7 @@ func (s Session) ShouldStop() bool {
 }
 
 type Record struct {
-	ID          string    `json:"id"`
+	ID          int       `json:"id"`
 	Cards       []int     `json:"cardIDs"`
 	StartedAt   time.Time `json:"staredAt"`
 	CompletedAt time.Time `json:"completedAt"`
@@ -64,7 +63,6 @@ func NewRecordFromSession(session *Session) Record {
 	}
 
 	return Record{
-		ID:          uuid.NewString(),
 		Cards:       ids,
 		StartedAt:   session.StartedAt,
 		CompletedAt: time.Now(),
@@ -72,8 +70,11 @@ func NewRecordFromSession(session *Session) Record {
 }
 
 var sessionTpml = `
-<div class="bg-white p-4 rounded-lg shadow-md border border-gray-200 space-y-2">
-{{if .IsCompleted}}
+	<div class="bg-white p-4 rounded-lg shadow-md border border-gray-200 space-y-2 cursor-pointer" craft-name="replay" id="stat-{{.ID}}" data="{{.ID}}" craft-input="#stat-{{.ID}}:[data]" craft-trigger="click">
+    <div class="flex items-center justify-between">
+        <span class="font-bold text-gray-700">ID:</span>
+        <span class="font-bold text-gray-700">{{.ID}}</span>
+    </div>
     <div class="flex items-center justify-between">
         <span class="font-bold text-gray-700">Status:</span>
         <span class="px-2 py-1 text-xs font-semibold text-white bg-green-500 rounded-full">Completed</span>
@@ -90,16 +91,6 @@ var sessionTpml = `
         <span class="font-bold text-gray-700">Date:</span>
         <span class="font-normal text-gray-600">{{.Date}}</span>
     </div>
-{{else}}
-    <div class="flex items-center justify-between">
-        <span class="font-bold text-gray-700">Status:</span>
-        <span class="px-2 py-1 text-xs font-semibold text-white bg-yellow-500 rounded-full">In Progress</span>
-    </div>
-    <div class="flex items-center justify-between">
-        <span class="font-bold text-gray-700">Started at:</span>
-        <span class="font-normal text-gray-600">{{.StartedAt}}</span>
-    </div>
-{{end}}
 </div>
 `
 
@@ -110,12 +101,12 @@ func (s Record) ToHTML() template.HTML {
 	}
 	buf := &strings.Builder{}
 	data := struct {
-		IsCompleted  bool
 		Date         string
 		Duration     string
 		CardReviewed int
+		ID           int
 	}{
-		IsCompleted:  !s.CompletedAt.IsZero(),
+		ID:           s.ID,
 		Date:         s.StartedAt.Format(time.DateTime),
 		Duration:     s.CompletedAt.Sub(s.StartedAt).Round(time.Second).String(),
 		CardReviewed: len(s.Cards),

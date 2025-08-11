@@ -80,10 +80,12 @@ class Crafter {
       console.error(`Crafter: Error loading Go WASM module: ${err}`);
     }
   }
-
   start() {
+    this.buildIndex();
+  }
+  buildIndex() {
     document.querySelectorAll("[craft-name]").forEach((ele) => {
-      this.handle(ele);
+      if (!ele.getAttribute("craft-proceed")) this.handle(ele);
     });
   }
 
@@ -103,61 +105,68 @@ class Crafter {
     console.log("handler is ready");
 
     const f = () => {
-      let callbackFn;
+      let callbackFn = () => {};
       const addr = ele.getAttribute("craft-target");
-      try {
-        let { el, prop } = parseCraftAddress(addr);
-        console.log("parsed", { el, prop });
-        let targetEl;
-        switch (el) {
-          case "":
-          case "this":
-            targetEl = ele;
-            break;
-          default:
-            targetEl = document.querySelector(el);
-            break;
-        }
-        console.log("here");
+      if (addr) {
+        try {
+          let { el, prop } = parseCraftAddress(addr);
+          console.log("parsed", { el, prop });
+          let targetEl;
+          switch (el) {
+            case "":
+            case "this":
+              targetEl = ele;
+              break;
+            default:
+              targetEl = document.querySelector(el);
+              break;
+          }
 
-        switch (prop) {
-          case "innerText":
-            callbackFn = (res) => (targetEl.innerText = res);
-            break;
-          case undefined:
-          case null:
-          case "innerHTML":
-            callbackFn = (res) => (targetEl.innerHTML = res);
-            break;
-          default:
-            if (prop.startsWith("[") && prop.endsWith("]")) {
-              console.log(prop);
-              prop = prop.slice(1, prop.length - 1);
+          switch (prop) {
+            case "innerText":
+              callbackFn = (res) => (targetEl.innerText = res);
+              break;
+            case undefined:
+            case null:
+            case "innerHTML":
+              callbackFn = (res) => (targetEl.innerHTML = res);
+              break;
+            default:
+              if (prop.startsWith("[") && prop.endsWith("]")) {
+                console.log(prop);
+                prop = prop.slice(1, prop.length - 1);
 
-              callbackFn = (res) => {
-                targetEl.setAttribute(prop, res);
-              };
-            } else {
-              callbackFn = (res) => {
-                console.log("default callback", res);
-              };
-            }
-            break;
+                callbackFn = (res) => {
+                  targetEl.setAttribute(prop, res);
+                };
+              } else {
+                callbackFn = (res) => {
+                  console.log("default callback", res);
+                };
+              }
+              break;
+          }
+        } catch (err) {
+          console.error("failed to parse craft address", err);
+          return;
         }
-      } catch (err) {
-        console.error("failed to parse craft address", err);
-        return;
       }
 
       const input = ele.getAttribute("craft-input");
       const parsed = parseCraftInput(input);
 
       const isAsync = ele.getAttribute("craft-async") !== null;
-      console.log(callbackFn);
       if (isAsync) {
-        handler(...parsed).then(callbackFn);
+        handler(...parsed)
+          .then(callbackFn)
+          .then(() => {
+            ele.setAttribute("craft-proceed", true);
+          })
+          .then(this.buildIndex());
       } else {
-        callbackFn(handler());
+        callbackFn(handler(...parsed));
+        ele.setAttribute("craft-proceed", true);
+        this.buildIndex();
       }
       // console.log("response", result);
     };
@@ -168,6 +177,7 @@ class Crafter {
         f();
         return;
       case "click":
+        console.log("onclick");
         ele.addEventListener("click", () => {
           f();
         });
