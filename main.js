@@ -95,14 +95,12 @@ class Crafter {
       return;
     }
     const method = ele.getAttribute("craft-name");
-    console.log("craft-call", method);
 
     const handler = this.wasmBridge[method];
     if (!handler && typeof handler !== "function") {
       console.log("WASM method not found");
       return;
     }
-    console.log("handler is ready");
 
     const f = () => {
       let callbackFn = () => {};
@@ -110,7 +108,6 @@ class Crafter {
       if (addr) {
         try {
           let { el, prop } = parseCraftAddress(addr);
-          console.log("parsed", { el, prop });
           let targetEl;
           switch (el) {
             case "":
@@ -133,7 +130,6 @@ class Crafter {
               break;
             default:
               if (prop.startsWith("[") && prop.endsWith("]")) {
-                console.log(prop);
                 prop = prop.slice(1, prop.length - 1);
 
                 callbackFn = (res) => {
@@ -177,7 +173,6 @@ class Crafter {
         f();
         return;
       case "click":
-        console.log("onclick");
         ele.addEventListener("click", () => {
           f();
         });

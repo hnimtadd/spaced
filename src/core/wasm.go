@@ -5,7 +5,6 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html/template"
 	"math/rand/v2"
@@ -22,6 +21,7 @@ import (
 	"github.com/hnimtadd/spaced/src/core/model"
 	"github.com/hnimtadd/spaced/src/core/session"
 	"github.com/hnimtadd/spaced/src/core/utils"
+	"github.com/hnimtadd/spaced/src/crafter"
 	"github.com/open-spaced-repetition/go-fsrs/v3"
 )
 
@@ -39,10 +39,9 @@ func init() {
 }
 
 type SpacedManager struct {
-	cards        internalfsrs.Cards
-	lookup       map[int]*model.Card
-	localStorage js.Value
-	fsrs         *fsrs.FSRS
+	cards  internalfsrs.Cards
+	lookup map[int]*model.Card
+	fsrs   *fsrs.FSRS
 
 	targetNum   int
 	currSession *session.Session
@@ -51,23 +50,18 @@ type SpacedManager struct {
 }
 
 func NewSpacedManger() (*SpacedManager, error) {
-	localStorage := js.Global().Get("localStorage")
-	if !localStorage.Truthy() {
-		return nil, errors.New("localStorage from JS is not truthy")
-	}
 	fsrss := fsrs.NewFSRS(fsrs.DefaultParam())
 	m := &SpacedManager{
-		localStorage: localStorage,
-		fsrs:         fsrss,
-		targetNum:    10,
-		records:      []*session.Record{},
-		lookup:       map[int]*model.Card{},
+		fsrs:      fsrss,
+		targetNum: 10,
+		records:   []*session.Record{},
+		lookup:    map[int]*model.Card{},
 	}
 	return m, nil
 }
 
 func (m *SpacedManager) JSInit(js.Value, []js.Value) any {
-	if err := m.handlePullState(); err != nil {
+	if err := m.parsedFromLocalState(); err != nil {
 		req := utils.Request{
 			URL:       "/assets/cards.json",
 			Method:    http.MethodGet,
@@ -86,7 +80,7 @@ func (m *SpacedManager) JSInit(js.Value, []js.Value) any {
 					for i := range m.cards {
 						m.cards[i].ID = i
 					}
-					m.handlePushState()
+					m.handleSaveState()
 					fmt.Println("cards loaded successfully")
 					// this is a hack, JS land and Go land should have a
 					// way to do some pub sub or callback management.
@@ -161,54 +155,37 @@ func (m *SpacedManager) completeSession() {
 	record := session.NewRecordFromSession(m.currSession)
 	m.addRecord(record)
 	m.currSession = nil
-	m.push("records", m.records)
-	m.push("flashcards", m.cards)
+	crafter.StorageSetItem("records", m.records)
+	crafter.StorageSetItem("flashcards", m.cards)
+	crafter.StorageRemoveItem("currentSession")
 }
 
-func (m *SpacedManager) pull(key string, to any) error {
-	dataRaw := m.localStorage.Call("getItem", key)
-	if !dataRaw.Truthy() {
-		return errors.New("flashcards in localStorage is in invalid form")
-	}
-	data := dataRaw.String()
-	if data == "" {
-		return errors.New("empty flashcards item, skipping")
-	}
-	err := utils.DeserializeTo([]byte(data), to)
-	if err != nil {
-		return errors.New("could not deserialize the data, got: " + err.Error())
-	}
-	return nil
-}
-
-func (m *SpacedManager) push(key string, data any) error {
-	dataBytes, err := utils.Serialize(data)
-	if err != nil {
-		return fmt.Errorf("failed to push state to localStorage: %w", err)
-	}
-
-	m.localStorage.Call("setItem", key, string(dataBytes))
-	return nil
-}
-
-// handlePullState pull the state passed from web browser.
-func (m *SpacedManager) handlePullState() error {
-	if err := m.pull("flashcards", &m.cards); err != nil {
+// parsedFromLocalState pull the state passed from web browser.
+func (m *SpacedManager) parsedFromLocalState() error {
+	if err := crafter.StorageGetItem("flashcards", &m.cards); err != nil {
 		return fmt.Errorf("failed to pull flashcards, err: %v", err)
 	}
-	if err := m.pull("records", &m.records); err != nil {
+	if err := crafter.StorageGetItem("records", &m.records); err != nil {
 		return fmt.Errorf("failed to pull sessions, err: %v", err)
+	}
+
+	if err := crafter.StorageGetItem("currentSession", &m.currSession); err != nil {
+		return fmt.Errorf("failed to save current session, err: %v", err)
 	}
 	return nil
 }
 
-// handlePushState push the state from wasm land to js land
-func (m *SpacedManager) handlePushState() error {
-	if err := m.push("flashcards", &m.cards); err != nil {
+// handleSaveState push the state from wasm land to js land
+func (m *SpacedManager) handleSaveState() error {
+	if err := crafter.StorageSetItem("flashcards", &m.cards); err != nil {
 		return fmt.Errorf("failed to push flashcards, err: %v", err)
 	}
-	if err := m.push("records", &m.records); err != nil {
+	if err := crafter.StorageSetItem("records", &m.records); err != nil {
 		return fmt.Errorf("failed to push sessions, err: %v", err)
+	}
+
+	if err := crafter.StorageSetItem("currentSession", &m.currSession); err != nil {
+		return fmt.Errorf("failed to save current session, err: %v", err)
 	}
 	return nil
 }
@@ -223,7 +200,7 @@ func (m *SpacedManager) next() any {
 
 	if m.currSession.ShouldStop() {
 		m.completeSession()
-		js.Global().Get("location").Call("assign", "/stats")
+		crafter.NavigateTo("/stats")
 		return model.StopResponse()
 	}
 
@@ -279,6 +256,14 @@ func (m *SpacedManager) JSSubmit(_ js.Value, args []js.Value) any {
 }
 
 func (m *SpacedManager) JSStart(js.Value, []js.Value) any {
+	if m.currSession != nil {
+		askPromiseFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
+			confirm := crafter.Call("confirm", "the current session is not finished, do you want to continue it first.")
+			crafter.Get("console.log").Invoke(confirm)
+			return js.ValueOf(nil)
+		})
+		askPromiseFunc.Invoke()
+	}
 	m.startSession()
 	return model.PayloadResponse("ready")
 }
@@ -339,7 +324,10 @@ func (m *SpacedManager) JSReplaySession(_ js.Value, args []js.Value) any {
 	session := m.sessionFromRecord(record)
 	fmt.Println(session)
 	m.currSession = session
-	js.Global().Get("location").Call("assign", "/session")
+	if err := m.handleSaveState(); err != nil {
+		fmt.Println("failed to save state", err)
+	}
+	crafter.NavigateTo("/session")
 	return nil
 }
 

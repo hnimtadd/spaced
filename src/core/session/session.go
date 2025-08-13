@@ -12,13 +12,10 @@ import (
 )
 
 type Session struct {
-	Cards fsrs.Cards
-
-	AgainsID map[int]bool
-
-	Looked map[int]bool
-
-	StartedAt time.Time
+	Cards     fsrs.Cards   `json:"cards"`
+	AgainsID  map[int]bool `json:"againsID"`
+	Looked    map[int]bool `json:"looked"`
+	StartedAt time.Time    `json:"staredAt"`
 }
 
 func NewSession(cards fsrs.Cards) *Session {
