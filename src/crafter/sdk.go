@@ -60,6 +60,10 @@ func NavigateTo(addr string) {
 	js.Global().Get("location").Call("assign", addr)
 }
 
+func Reload() {
+	js.Global().Get("location").Call("reload")
+}
+
 func Call(method string, args ...any) js.Value {
 	return js.Global().Call(method, args...)
 }

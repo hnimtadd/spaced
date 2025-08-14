@@ -258,11 +258,19 @@ func (m *SpacedManager) JSSubmit(_ js.Value, args []js.Value) any {
 func (m *SpacedManager) JSStart(js.Value, []js.Value) any {
 	if m.currSession != nil {
 		askPromiseFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
-			confirm := crafter.Call("confirm", "the current session is not finished, do you want to continue it first.")
-			crafter.Get("console.log").Invoke(confirm)
+			confirmJS := crafter.Call("confirm", "the current session is not finished, do you want to continue it first.")
+			confirm := confirmJS.Bool()
+			crafter.Get("console.log").Invoke(confirmJS)
+			if !confirm {
+				crafter.Get("console.log").Invoke(js.ValueOf("here"))
+				m.currSession = nil
+				m.handleSaveState()
+				crafter.Reload()
+			}
 			return js.ValueOf(nil)
 		})
 		askPromiseFunc.Invoke()
+		return model.PayloadResponse("ready")
 	}
 	m.startSession()
 	return model.PayloadResponse("ready")
