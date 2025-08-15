@@ -75,3 +75,33 @@ func Get(objectKey string) js.Value {
 	}
 	return object
 }
+
+type WASM struct {
+	handlers map[string]js.Func
+}
+
+func NewWasm() *WASM {
+	return &WASM{
+		handlers: make(map[string]js.Func),
+	}
+}
+
+func (w *WASM) HandleFunc(path string, fn func(this js.Value, args []js.Value) any) {
+	w.handlers[path] = js.FuncOf(fn)
+}
+
+func (w *WASM) ListenAndServe() error {
+	c := make(chan struct{})
+
+	// Map of exposed Go methods for easy lookup in JS land.
+	wasmBridge := js.Global().Get("Object").New()
+	for name, fn := range w.handlers {
+		wasmBridge.Set(name, fn)
+	}
+
+	js.Global().Set("wasmBridge", wasmBridge)
+
+	// Keep the Go program running so the WASM module doesn't exit.
+	<-c
+	return nil
+}

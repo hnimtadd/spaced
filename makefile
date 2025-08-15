@@ -1,14 +1,11 @@
 .PHONY: server
 server:
-	go run ./cmd/server
+	@ go run ./cmd/server ui
 
 .PHONY: wasm
 wasm:
-	GOOS=js GOARCH=wasm go build  -o ./assets/main.wasm ./src/core/wasm.go
-
-.PHONY: tinywasm
-tinywasm:
-	GOOS=js GOARCH=wasm tinygo build -o ./assets/wasm.wasm ./src/core/wasm.go
+	@GOOS=js GOARCH=wasm go build  -o ./ui/assets/session.wasm ./wasm/session/session.go
+	@GOOS=js GOARCH=wasm go build  -o ./ui/assets/stats.wasm ./wasm/stats/stats.go
 
 .PHONY: shell
 shell:

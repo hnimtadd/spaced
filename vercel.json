@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "public": true,
   "functions": {
     "api/sound/index.go": {
@@ -7,25 +8,27 @@
       "maxDuration": 30
     }
   },
-  "routes": [
+  "outputDirectory": "ui",
+  "rewrites": [
     {
-      "src": "/stats",
-      "dest": "/stats.html"
+      "source": "/stats",
+      "destination": "/stats.html"
     },
     {
-      "src": "/session",
-      "dest": "/session.html"
+      "source": "/session",
+      "destination": "/session.html"
     },
     {
-      "src": "/reset",
-      "dest": "/reset.html"
+      "source": "/reset",
+      "destination": "/reset.html"
     },
     {
-      "handle": "filesystem"
+      "source": "/assets/:match*",
+      "destination": "/assets/:match*"
     },
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
