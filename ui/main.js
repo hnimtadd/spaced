@@ -75,7 +75,7 @@ class Crafter {
       this.wasmBridge = globalThis.wasmBridge;
       this.isReady = true;
       console.info("Crafter: initialized");
-      this.call("init", location.toString());
+      this.call("init");
     } catch (err) {
       console.error(`Crafter: Error loading Go WASM module: ${err}`);
     }

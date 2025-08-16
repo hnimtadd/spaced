@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
+	"strconv"
 	"syscall/js"
 	"time"
 
@@ -36,29 +38,30 @@ func init() {
 }
 
 type SpacedManager struct {
-	cards  internalfsrs.Cards
-	lookup map[int]*model.Card
-	fsrs   *fsrs.FSRS
+	cards       internalfsrs.Cards
+	cardsLookup map[int]*model.Card
+	fsrs        *fsrs.FSRS
 
 	targetNum   int
 	currSession *session.Session
 
-	records []*session.Record
+	records       []*session.Record
+	recordsLookup map[int]*session.Record
 }
 
 func NewSpacedManger() (*SpacedManager, error) {
 	fsrss := fsrs.NewFSRS(fsrs.DefaultParam())
 	m := &SpacedManager{
-		fsrs:      fsrss,
-		targetNum: 10,
-		records:   []*session.Record{},
-		lookup:    map[int]*model.Card{},
+		fsrs:          fsrss,
+		targetNum:     10,
+		records:       []*session.Record{},
+		cardsLookup:   map[int]*model.Card{},
+		recordsLookup: map[int]*session.Record{},
 	}
 	return m, nil
 }
 
 func (m *SpacedManager) JSInit(_ js.Value, args []js.Value) any {
-	fmt.Println("args", args)
 	if err := m.parsedFromLocalState(); err != nil {
 		req := utils.Request{
 			URL:       "/assets/cards.json",
@@ -70,7 +73,6 @@ func (m *SpacedManager) JSInit(_ js.Value, args []js.Value) any {
 			resp := args[0]
 			jsonPromiseFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
 				jsonString := js.Global().Get("JSON").Call("stringify", args[0]).String()
-				fmt.Println(jsonString)
 				if err := json.Unmarshal([]byte(jsonString), &m.cards); err != nil {
 					fmt.Println("failed to unmarshal cards:", err)
 				} else {
@@ -98,14 +100,27 @@ func (m *SpacedManager) JSInit(_ js.Value, args []js.Value) any {
 	}
 
 	for card := range slices.Values(m.cards) {
-		m.lookup[card.ID] = card
+		m.cardsLookup[card.ID] = card
 	}
+
+	for record := range slices.Values(m.records) {
+		m.recordsLookup[record.ID] = record
+	}
+
 	return js.ValueOf(nil)
 }
 
-// startSession based on the list of most urgent due date cards
-// prepare the list of cards to be review in this session.
-func (m *SpacedManager) startSession() any {
+func (m *SpacedManager) sessionFromRecord(record *session.Record) *session.Session {
+	cards := internalfsrs.Cards{}
+	for _, cardID := range record.Cards {
+		cards = append(cards, m.cardsLookup[cardID])
+	}
+	return session.NewSession(cards)
+}
+
+// newSession based on the list of most urgent due date cards
+// prepare the list of cards.
+func (m *SpacedManager) newSession() *session.Session {
 	revieweds := internalfsrs.Cards{}
 	news := internalfsrs.Cards{}
 	for _, card := range m.cards {
@@ -136,8 +151,7 @@ func (m *SpacedManager) startSession() any {
 		cards[i], cards[j] = cards[j], cards[i]
 	})
 
-	m.currSession = session.NewSession(cards)
-	return model.PayloadResponse("success")
+	return session.NewSession(cards)
 }
 
 func (m *SpacedManager) addRecord(record session.Record) error {
@@ -167,9 +181,6 @@ func (m *SpacedManager) parsedFromLocalState() error {
 		return fmt.Errorf("failed to pull sessions, err: %v", err)
 	}
 
-	if err := crafter.StorageGetItem("currentSession", &m.currSession); err != nil {
-		return fmt.Errorf("failed to save current session, err: %v", err)
-	}
 	return nil
 }
 
@@ -240,37 +251,50 @@ func (m *SpacedManager) JSSubmit(_ js.Value, args []js.Value) any {
 		// assume that we have a very little latency, from when the user provide
 		// feedback to when this path is reached.
 		// so using current timestamp
-		card, exists := m.lookup[*cardID]
+		card, exists := m.cardsLookup[*cardID]
 		if !exists {
 			return model.ErrorResponse("submit for not exists card")
 		}
 		fmt.Println("handle submit for", "id", *cardID, card)
 		state := m.fsrs.Repeat(card.ToFsrsCard(), time.Now())
-		m.lookup[*cardID].SyncFromFSRSCard(state[*rating].Card)
+		m.cardsLookup[*cardID].SyncFromFSRSCard(state[*rating].Card)
 		return model.PayloadResponse("updated")
 	}
 
 	return model.PayloadResponse("not updated")
 }
 
-func (m *SpacedManager) JSStart(js.Value, []js.Value) any {
-	if m.currSession != nil {
-		askPromiseFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
-			confirmJS := crafter.Call("confirm", "the current session is not finished, do you want to continue it first.")
-			confirm := confirmJS.Bool()
-			crafter.Get("console.log").Invoke(confirmJS)
-			if !confirm {
-				crafter.Get("console.log").Invoke(js.ValueOf("here"))
-				m.currSession = nil
-				m.handleSaveState()
-				crafter.Reload()
-			}
-			return js.ValueOf(nil)
-		})
-		askPromiseFunc.Invoke()
+// JSStart check if current URL is targeted specific session, then restore
+// the session from that id, otherwise, create a new session.
+func (m *SpacedManager) JSStart(this js.Value, args []js.Value) any {
+	fmt.Println("args", args)
+	path := crafter.CurrentPath()
+	fmt.Println("path", path)
+
+	u, err := url.Parse(path)
+	if err != nil {
+		fmt.Println("failed to parse url", err)
+		m.currSession = m.newSession()
 		return model.PayloadResponse("ready")
 	}
-	m.startSession()
+
+	sessionID := u.Query().Get("id")
+	if sessionID == "" {
+		fmt.Println("empty sessionID", err)
+		m.currSession = m.newSession()
+		return model.PayloadResponse("ready")
+	}
+	fmt.Println("restart from sessionID", sessionID)
+
+	id, err := strconv.Atoi(sessionID)
+	if err != nil {
+		m.currSession = m.newSession()
+		return model.PayloadResponse("ready")
+	}
+	fmt.Println("restart from session", id)
+
+	m.currSession = m.sessionFromRecord(m.recordsLookup[id])
+	fmt.Println(m.currSession)
 	return model.PayloadResponse("ready")
 }
 

@@ -11,6 +11,12 @@ import (
 	"github.com/hnimtadd/spaced/src/core/utils"
 )
 
+// CurrentPath return current url path
+func CurrentPath() string {
+	path := js.Global().Get("location").Call("toString").String()
+	return path
+}
+
 func StorageSetItem(key string, data any) error {
 	localStorage := js.Global().Get("localStorage")
 	if !localStorage.Truthy() {
