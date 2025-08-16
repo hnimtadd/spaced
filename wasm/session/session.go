@@ -364,16 +364,12 @@ func JSPlay(_ js.Value, args []js.Value) any {
 		})
 
 		return utils.HTTPRequest(req, resolveFunc, utils.NopFunc)
-		// js.Global().Get("console").Call("log", "response from http request", resp)
 	}
 
-	if sound64 != "" {
-		if err := playSound64(sound64); err != nil {
-			fmt.Println("failed to playsound64", err)
-		}
-		return js.ValueOf(sound64)
+	if err := playSound64(sound64); err != nil {
+		fmt.Println("failed to playsound64", err)
 	}
-	return js.ValueOf(nil)
+	return crafter.ReturnAsync(sound64)
 }
 
 func playSound64(sound64 string) error {
@@ -381,77 +377,56 @@ func playSound64(sound64 string) error {
 	if err != nil {
 		return err
 	}
-	go func() {
-		audioDataLength := len(payload)
-		fmt.Printf("Go WASM: Payload audio data length: %d bytes\n", audioDataLength)
-		state := audioContext.Get("state").String()
-		switch state {
-		case "suspended":
-			// Ensure AudioContext is in a runnable state.
-			fmt.Println("Go WASM: AudioContext is suspended, attempting to resume.")
-			resumePromise := audioContext.Call("resume")
-			resumePromise.Call("then", js.FuncOf(func(this js.Value, pArgs []js.Value) any {
-				fmt.Println("Go WASM: AudioContext resumed successfully.")
-				return nil
-			}), js.FuncOf(func(this js.Value, pArgs []js.Value) any {
-				err := pArgs[0]
-				errMsg := fmt.Sprintf("failed to resume AudioContext: %v", err.String())
-				fmt.Printf("Go WASM Error: %s\n", errMsg)
-				js.Global().Get("alert").Call("alert", errMsg)
-				return nil
-			}))
-			// Give the promise some time to resolve before proceeding.
-			// In a real application, you might use a channel or a more robust promise handling pattern.
-			// For this example, a small sleep might work, but it's not ideal for production.
-			// A better approach would be to chain the decode/play calls after the resume promise resolves.
-			time.Sleep(100 * time.Millisecond) // This is a simple, but not robust, way to wait.
-		case "running":
-			if soundSource != nil {
-				// any non-null soundsource mean there's an playing audio.
-				// stop it first
-				fmt.Println("stop")
-				soundSource.(js.Value).Call("stop")
-				soundSource.(js.Value).Call("disconnect")
-			}
-		}
+	audioDataLength := len(payload)
+	fmt.Printf("Go WASM: Payload audio data length: %d bytes\n", audioDataLength)
+	state := audioContext.Get("state").String()
+	switch state {
+	case "suspended":
+		// Ensure AudioContext is in a runnable state.
+		fmt.Println("Go WASM: AudioContext is suspended, attempting to resume.")
+		// Give the promise some time to resolve before proceeding.
+		// In a real application, you might use a channel or a more robust promise handling pattern.
+		// For this example, a small sleep might work, but it's not ideal for production.
+		// A better approach would be to chain the decode/play calls after the resume promise resolves.
+		time.Sleep(100 * time.Millisecond) // This is a simple, but not robust, way to wait.
+	}
 
-		// Create a JavaScript ArrayBuffer to hold the audio data
-		jsAudioBuffer := js.Global().Get("ArrayBuffer").New(audioDataLength)
+	// Create a JavaScript ArrayBuffer to hold the audio data
+	jsAudioBuffer := js.Global().Get("ArrayBuffer").New(audioDataLength)
 
-		// Create a Uint8Array view over the ArrayBuffer
-		jsUint8Array := js.Global().Get("Uint8Array").New(jsAudioBuffer)
+	// Create a Uint8Array view over the ArrayBuffer
+	jsUint8Array := js.Global().Get("Uint8Array").New(jsAudioBuffer)
 
-		// Copy bytes from Go []byte to the JS Uint8Array
-		js.CopyBytesToJS(jsUint8Array, payload)
-		// 5. Decode the ArrayBuffer into an AudioBuffer (asynchronously)
-		decodePromise := audioContext.Call("decodeAudioData", jsAudioBuffer)
+	// Copy bytes from Go []byte to the JS Uint8Array
+	js.CopyBytesToJS(jsUint8Array, payload)
+	// 5. Decode the ArrayBuffer into an AudioBuffer (asynchronously)
+	decodePromise := audioContext.Call("decodeAudioData", jsAudioBuffer)
 
-		// Handle the decode Promise resolution and rejection from Go
-		decodePromise.Call("then", js.FuncOf(func(this js.Value, pArgs []js.Value) any {
-			audioBuffer := pArgs[0] // The decoded AudioBuffer
-			fmt.Println("Go WASM: Audio decoded successfully.")
+	// Handle the decode Promise resolution and rejection from Go
+	decodePromise.Call("then", js.FuncOf(func(this js.Value, pArgs []js.Value) any {
+		audioBuffer := pArgs[0] // The decoded AudioBuffer
+		fmt.Println("Go WASM: Audio decoded successfully.")
 
-			source := js.Global().Get("AudioBufferSourceNode").New(audioContext)
-			soundSource = source
-			source.Set("buffer", audioBuffer) // Set the decoded audio data
-			source.Call("connect", audioContext.Get("destination"))
-			source.Call("start", 0) // Play from the beginning
-			source.Set("onended", js.FuncOf(func(this js.Value, _ []js.Value) any {
-				fmt.Println("Go WASM: Audio playback finished.")
-				source.Call("disconnect")
-				soundSource = nil
-				return js.ValueOf(nil)
-			}))
-
-			return nil
-		}), js.FuncOf(func(this js.Value, pArgs []js.Value) any {
-			err := pArgs[0] // The error object
-			errMsg := fmt.Sprintf("Error decoding audio data: %v", err.String())
-			fmt.Printf("Go WASM Error: %s\n", errMsg)
-			js.Global().Get("alert").Call("alert", errMsg)
-			return nil
+		source := js.Global().Get("AudioBufferSourceNode").New(audioContext)
+		soundSource = source
+		source.Set("buffer", audioBuffer) // Set the decoded audio data
+		source.Call("connect", audioContext.Get("destination"))
+		source.Call("start", 0) // Play from the beginning
+		source.Set("onended", js.FuncOf(func(this js.Value, _ []js.Value) any {
+			fmt.Println("Go WASM: Audio playback finished.")
+			source.Call("disconnect")
+			soundSource = nil
+			return js.ValueOf(nil)
 		}))
-	}()
+
+		return nil
+	})).Call("catch", js.FuncOf(func(this js.Value, pArgs []js.Value) any {
+		err := pArgs[0] // The error object
+		errMsg := fmt.Sprintf("Error decoding audio data: %v", err.String())
+		fmt.Printf("Go WASM Error: %s\n", errMsg)
+		js.Global().Get("alert").Call("alert", errMsg)
+		return nil
+	}))
 	return nil
 }
 

@@ -11,6 +11,13 @@ import (
 	"github.com/hnimtadd/spaced/src/core/utils"
 )
 
+func ReturnAsync(response any) any {
+	return js.Global().Get("Promise").New(js.FuncOf(func(this js.Value, args []js.Value) any {
+		resolve := args[0]
+		return resolve.Invoke(response)
+	}))
+}
+
 // CurrentPath return current url path
 func CurrentPath() string {
 	path := js.Global().Get("location").Call("toString").String()

@@ -5,6 +5,3 @@
 - [x] Session redo
 - [ ] Card import-export.
 
-/session?session-id=<id>
-session.wasm
-session.wasm.start(session-id=<id>)

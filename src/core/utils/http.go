@@ -35,10 +35,12 @@ var NopFunc = js.FuncOf(func(this js.Value, args []js.Value) any {
 	return js.ValueOf(nil)
 })
 
-func HTTPRequest(req Request, resolve js.Func, reject js.Func) js.Value {
+func HTTPRequest(req Request, resolveFn js.Func, rejectFn js.Func) js.Value {
 	// Handler for the promise
 	// We need to return a promise because HTTP requests are blocking in Go.
 	handler := js.FuncOf(func(this js.Value, args []js.Value) any {
+		resolveHandler := args[0]
+		rejectHandler := args[1]
 		// Run the logic asynchrnously.
 		go func() {
 			client := &http.Client{}
@@ -49,7 +51,7 @@ func HTTPRequest(req Request, resolve js.Func, reject js.Func) js.Value {
 				// Handle errors: reject the Promise if we have an error
 				errorConstructor := js.Global().Get("Error")
 				errorObject := errorConstructor.New(err.Error())
-				reject.Invoke(errorObject)
+				rejectHandler.Invoke(rejectFn.Invoke(errorObject))
 				return
 			}
 			defer res.Body.Close()
@@ -60,7 +62,7 @@ func HTTPRequest(req Request, resolve js.Func, reject js.Func) js.Value {
 				// Handle errors here too
 				errorConstructor := js.Global().Get("Error")
 				errorObject := errorConstructor.New(err.Error())
-				reject.Invoke(errorObject)
+				rejectHandler.Invoke(rejectFn.Invoke(errorObject))
 				return
 			}
 			// "data" is a byte slice, so we need to convert it to a JS Uint8Array object
@@ -73,7 +75,7 @@ func HTTPRequest(req Request, resolve js.Func, reject js.Func) js.Value {
 			response := responseConstructor.New(dataJS)
 
 			// Resolve the Promise
-			resolve.Invoke(response)
+			resolveHandler.Invoke(resolveFn.Invoke(response))
 		}()
 
 		// The handler of a Promise doesn't return any value.

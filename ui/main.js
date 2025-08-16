@@ -152,6 +152,7 @@ class Crafter {
       const parsed = parseCraftInput(input);
 
       const isAsync = ele.getAttribute("craft-async") !== null;
+
       if (isAsync) {
         handler(...parsed)
           .then(callbackFn)
@@ -164,7 +165,6 @@ class Crafter {
         ele.setAttribute("craft-proceed", true);
         this.buildIndex();
       }
-      // console.log("response", result);
     };
 
     const trigger = ele.getAttribute("craft-trigger");
@@ -172,11 +172,14 @@ class Crafter {
       case null:
         f();
         return;
-      case "click":
-        ele.addEventListener("click", () => {
+      case "click": {
+        const handler = (e) => {
+          e.stopImmediatePropagation();
           f();
-        });
+        };
+        ele.addEventListener("click", handler);
         return;
+      }
     }
   }
 
