@@ -135,7 +135,7 @@ func (m *SpacedManager) newSession() *session.Session {
 	numCards := min(m.targetNum, len(m.cards))
 	cards := make(internalfsrs.Cards, numCards)
 
-	numReviewed := int(0.2 * float64(numCards))
+	numReviewed := min(int(0.2*float64(numCards)), len(revieweds))
 	numNews := numCards - numReviewed
 
 	i := 0
