@@ -2,6 +2,10 @@
 
 A modern spaced repetition vocabulary learning application built with Go and WebAssembly (WASM). The application uses the FSRS (Free Spaced Repetition Scheduler) algorithm to optimize vocabulary retention through intelligent card scheduling.
 
+Deployed at:
+- [https://spaced.craftznake.space](https://spaced.craftznake.space)
+- [https://spaced-indol.vercel.app/](https://spaced-indol.vercel.app/)
+
 ## Features
 
 - **Spaced Repetition**: Uses the FSRS algorithm for optimal learning intervals
